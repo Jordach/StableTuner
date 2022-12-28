@@ -355,7 +355,7 @@ def parse_args():
         args.local_rank = env_local_rank
 
     return args
-
+max_token_extension = 4
 
 ASPECT_832 = [[832, 832], 
 [896, 768], [768, 896], 
@@ -1512,18 +1512,26 @@ def main():
         
         #print(pixel_values)
         #unpack the pixel_values from tensor to list
-
-
         pixel_values = torch.stack(pixel_values)
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
         
+        max_length = 0
+        max_chunks = 0
+        max_chunks = max_token_extension
+        if max_token_extension > 1: # Handle models that want 75 * x tokens available.
+            max_length = tokenizer.model_max_length
+            max_len_input = (max_length * max_chunks) - (max_chunks * 2)
+        else:
+            max_length = tokenizer.model_max_length - 2
+            max_len_input = max_length
+            
         input_ids = tokenizer.pad(
             {"input_ids": input_ids},
             padding="max_length",
-            max_length=tokenizer.model_max_length,
+            max_length=max_len_input,
             return_tensors="pt",\
             ).input_ids
-            
+        
         batch = {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
@@ -2094,13 +2102,78 @@ def main():
                     noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
                     # Get the text embedding for conditioning
+                    # with text_enc_context:
+                    #     if args.train_text_encoder:
+                    #         if args.clip_penultimate == True:
+                    #             encoder_hidden_states = text_encoder(batch[0][1],output_hidden_states=True)
+                    #             encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
+                    #         else:
+                    #             encoder_hidden_states = text_encoder(batch[0][1])[0]
+                    #     else:
+                    #         encoder_hidden_states = batch[0][1]
+
                     with text_enc_context:
                         if args.train_text_encoder:
-                            if args.clip_penultimate == True:
-                                encoder_hidden_states = text_encoder(batch[0][1],output_hidden_states=True)
-                                encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
+                            # Duplicate batch tensor to prevent irreparably damaging it's token data
+                            n_batch = batch[0][1].clone().detach()
+                            if max_token_extension > 1: # Handle models that want 75 * x tokens available.
+                                max_length = tokenizer.model_max_length
+                                max_standard_tokens = max_length - 2
+                                max_len = np.ceil(max(len(x) for x in batch[0][1]) / max_standard_tokens).astype(int).item() * max_standard_tokens
+                                if max_len > max_standard_tokens:
+                                    z = None
+                                    for i, x in enumerate(n_batch):
+                                        if len(x) < max_len:
+                                            n_batch[i] = [*x, *np.full((max_len - len(x)), tokenizer.eos_token_id)]
+                                            
+                                    # Recommended over torch.tensor()
+                                    batch_t = n_batch.clone().detach().to(accelerator.device)
+                                    chunks = [batch_t[:, i:i + max_standard_tokens] for i in range(0, max_len, max_standard_tokens)]
+                                    for chunk in chunks:
+                                        chunk = chunk.to(accelerator.device)
+                                        chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1)
+                                        if z is None:
+                                            if args.clip_penultimate:
+                                                encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
+                                                z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
+                                                del encode
+                                            else:
+                                                encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
+                                                z = encode.last_hidden_state
+                                                del encode
+                                        else:
+                                            if args.clip_penultimate:
+                                                encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
+                                                z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
+                                                del encode
+                                            else:
+                                                encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
+                                                z = torch.cat((z, encode.last_hidden_state), dim=-2)
+                                                del encode
+                                        del chunk
+                                    n_batch = z
+                                    del z
+                                else:
+                                    for i, x in enumerate(n_batch):
+                                        batch["input_ids"][i] = [tokenizer.bos_token_id, *x, *np.full((tokenizer.model_max_length - len(x) - 1), tokenizer.eos_token_id)]
+                                    if args.clip_penultimate:
+                                        encode = text_encoder(torch.asarray(n_batch), output_hidden_states=True)
+                                        encoder_hidden_states = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
+                                        del encode
+                                    else:
+                                        encode = text_encoder(torch.asarray(n_batch), output_hidden_states=True)
+                                        encoder_hidden_states = encode.last_hidden_state
+                                        del encode
                             else:
-                                encoder_hidden_states = text_encoder(batch[0][1])[0]
+                                for i, x in enumerate(n_batch):
+                                    for j, y in enumerate(x):
+                                        n_batch[i][j] = [tokenizer.bos_token_id, *y, *np.full((tokenizer.model_max_length - len(y) - 1), tokenizer.eos_token_id)]
+                            
+                                if args.clip_penultimate:
+                                    n_batch = [text_encoder.text_model.final_layer_norm(text_encoder(torch.asarray(input_id).to(accelerator.device), output_hidden_states=True)['hidden_states'][-2])[0] for input_id in n_batch]
+                                else:
+                                    n_batch = [text_encoder(torch.asarray(input_id).to(accelerator.device), output_hidden_states=True).last_hidden_state[0] for input_id in n_batch]
+                            encoder_hidden_states = torch.stack(tuple(n_batch))
                         else:
                             encoder_hidden_states = batch[0][1]
 
@@ -2196,7 +2269,6 @@ def main():
                         save_and_sample_weights(epoch,'epoch')
                     else:
                         save_and_sample_weights(epoch,'epoch',False)
-                    print_instructions()
             if epoch % args.save_every_n_epoch and mid_checkpoint==True or mid_sample==True:
                 if mid_checkpoint==True:
                     save_and_sample_weights(epoch,'epoch',True)
