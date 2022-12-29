@@ -349,13 +349,13 @@ def parse_args():
     parser.add_argument('--append_sample_controlled_seed_action', action='append')
     parser.add_argument('--add_sample_prompt', type=str, action='append')
     parser.add_argument('--use_image_names_as_captions', default=False, action="store_true")
+    parser.add_argument('--model_variant', default="base")
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
         args.local_rank = env_local_rank
 
     return args
-max_token_extension = 4
 
 ASPECT_832 = [[832, 832], 
 [896, 768], [768, 896], 
@@ -595,8 +595,7 @@ class AutoBucketing(Dataset):
             example["instance_prompt_ids"] = self.tokenizer(
                 image_train_tmp.caption,
                 padding="do_not_pad",
-                truncation=True,
-                max_length=self.tokenizer.model_max_length,
+                verbose=False,
             ).input_ids
             image_train_item.self_destruct()
             return example
@@ -608,8 +607,6 @@ class AutoBucketing(Dataset):
             example["class_prompt_ids"] = self.tokenizer(
                 image_train_tmp.caption,
                 padding="do_not_pad",
-                truncation=True,
-                max_length=self.tokenizer.model_max_length,
             ).input_ids
             image_train_item.self_destruct()
             return example
@@ -1111,8 +1108,7 @@ class NormalDataset(Dataset):
         example["instance_prompt_ids"] = self.tokenizer(
             instance_prompt,
             padding="do_not_pad",
-            truncation=True,
-            max_length=self.tokenizer.model_max_length,
+            verbose=False,
         ).input_ids
         if self.with_prior_preservation:
             class_path, class_prompt = self.class_images_path[index % self.num_class_images]
@@ -1123,8 +1119,6 @@ class NormalDataset(Dataset):
             example["class_prompt_ids"] = self.tokenizer(
                 class_prompt,
                 padding="do_not_pad",
-                truncation=True,
-                max_length=self.tokenizer.model_max_length,
             ).input_ids
 
         return example
@@ -1184,11 +1178,12 @@ class CachedLatentsDataset(Dataset):
         self.latents = self.cache.latents_cache[0]
         if index in self.conditional_indexes:
             self.text_encoder = self.empty_tokens
+            self.num_chunks = 1
         else:
             self.text_encoder = self.cache.text_encoder_cache[0]
-        
+            self.num_chunks = self.cache.num_chunks
         del self.cache
-        return self.latents, self.text_encoder
+        return self.latents, self.text_encoder, self.num_chunks
     def add_pt_cache(self, cache_path):
         if len(self.cache_paths) == 0:
             self.cache_paths = (cache_path,)
@@ -1196,20 +1191,18 @@ class CachedLatentsDataset(Dataset):
             self.cache_paths += (cache_path,)
         
 class LatentsDataset(Dataset):
-    def __init__(self, latents_cache=None, text_encoder_cache=None):
+    def __init__(self, latents_cache=None, text_encoder_cache=None, num_chunks=None):
         self.latents_cache = latents_cache
         self.text_encoder_cache = text_encoder_cache
-    def add_latent(self, latent, text_encoder):
+        self.num_chunks = num_chunks
+    def add_latent(self, latent, text_encoder, num_chunks):
         self.latents_cache.append(latent)
         self.text_encoder_cache.append(text_encoder)
+        self.num_chunks = num_chunks
     def __len__(self):
         return len(self.latents_cache)
     def __getitem__(self, index):
-        return self.latents_cache[index], self.text_encoder_cache[index]
-    def __add__(self, other):
-        latents_cache = self.latents_cache + other.latents_cache
-        text_encoder_cache = self.text_encoder_cache + other.text_encoder_cache
-        return LatentsDataset(latents_cache, text_encoder_cache)
+        return self.latents_cache[index], self.text_encoder_cache[index], self.num_chunks
 class AverageMeter:
     def __init__(self, name=None):
         self.name = name
@@ -1495,46 +1488,42 @@ def main():
         seed = args.seed
     )
     def collate_fn(examples):
-        #print(examples)
-        #print('test')
         input_ids = [example["instance_prompt_ids"] for example in examples]
         pixel_values = [example["instance_images"] for example in examples]
-        #print('test')
         # Concat class and instance examples for prior preservation.
         # We do this to avoid doing two forward passes.
         if args.with_prior_preservation:
             input_ids += [example["class_prompt_ids"] for example in examples]
             pixel_values += [example["class_images"] for example in examples]
         ### no need to do it now when it's loaded by the multiAspectsDataset
-        #if args.with_prior_preservation:
-        #    input_ids += [example["class_prompt_ids"] for example in examples]
-        #    pixel_values += [example["class_images"] for example in examples]
-        
-        #print(pixel_values)
-        #unpack the pixel_values from tensor to list
         pixel_values = torch.stack(pixel_values)
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
         
-        max_length = 0
-        max_chunks = 0
-        max_chunks = max_token_extension
-        if max_token_extension > 1: # Handle models that want 75 * x tokens available.
-            max_length = tokenizer.model_max_length
-            max_len_input = (max_length * max_chunks) - (max_chunks * 2)
-        else:
-            max_length = tokenizer.model_max_length - 2
-            max_len_input = max_length
-            
+        # Find the maximum length of the input_ids and clip to the next number of 75 tokens to avoid unruly SD front ends failing.
+        max_len = max(len(x) for x in input_ids)
+
+        # Calculate the number of chunks needed to process the input_ids in extended mode
+        num_chunks = math.ceil(max_len / 75)
+        # Prevent zero dimensional tensors due to zero tokens
+        if num_chunks < 1:
+            num_chunks = 1
+
+        # Fix text encoder accessing tensor parts that simply don't exist
+        len_input = tokenizer.model_max_length - 2
+        if num_chunks > 1:
+            len_input = (tokenizer.model_max_length * num_chunks) - (num_chunks * 2)
+
         input_ids = tokenizer.pad(
             {"input_ids": input_ids},
             padding="max_length",
-            max_length=max_len_input,
+            max_length=len_input,
             return_tensors="pt",\
             ).input_ids
-        
+            
         batch = {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
+            'num_chunk': num_chunks
         }
         return batch
 
@@ -1615,10 +1604,10 @@ def main():
     if gen_cache == True:
         #delete all the cached latents if they exist to avoid problems
         print(f" {bcolors.WARNING}Generating latents cache...{bcolors.ENDC}") 
-        train_dataset = LatentsDataset([], [])
         counter = 0
         with torch.no_grad():
             for batch in tqdm(train_dataloader, desc="Caching latents", bar_format='%s{l_bar}%s%s{bar}%s%s{r_bar}%s'%(bcolors.OKBLUE,bcolors.ENDC, bcolors.OKBLUE, bcolors.ENDC,bcolors.OKBLUE,bcolors.ENDC,)):
+                train_dataset = LatentsDataset([], [],1)
                 batch["pixel_values"] = batch["pixel_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
                 batch["input_ids"] = batch["input_ids"].to(accelerator.device, non_blocking=True)
                 
@@ -1627,14 +1616,16 @@ def main():
                     cached_text_enc = batch["input_ids"]
                 else:
                     cached_text_enc = text_encoder(batch["input_ids"])[0]
-                train_dataset.add_latent(cached_latent, cached_text_enc)
+                num_chunks = batch['num_chunk']
+                train_dataset.add_latent(cached_latent, cached_text_enc,num_chunks)
                 del batch
                 del cached_latent
                 del cached_text_enc
                 torch.save(train_dataset, os.path.join(latent_cache_dir,f"latents_cache_{counter}.pt"))
+                del train_dataset
                 cached_dataset.add_pt_cache(os.path.join(latent_cache_dir,f"latents_cache_{counter}.pt"))
                 counter += 1
-                train_dataset = LatentsDataset([], [])
+                
                 #if counter % 300 == 0:
                     #train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=1, collate_fn=lambda x: x, shuffle=False)
                 #    gc.collect()
@@ -1698,7 +1689,7 @@ def main():
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
     logger.info("***** Running training *****")
-    logger.info(f"  Num examples = {len(train_dataset)}")
+    logger.info(f"  Num examples = {len(cached_dataset)}")
     logger.info(f"  Num batches each epoch = {len(train_dataloader)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
     logger.info(f"  Instantaneous batch size per device = {args.train_batch_size}")
@@ -2102,81 +2093,48 @@ def main():
                     noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
                     # Get the text embedding for conditioning
-                    # with text_enc_context:
-                    #     if args.train_text_encoder:
-                    #         if args.clip_penultimate == True:
-                    #             encoder_hidden_states = text_encoder(batch[0][1],output_hidden_states=True)
-                    #             encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
-                    #         else:
-                    #             encoder_hidden_states = text_encoder(batch[0][1])[0]
-                    #     else:
-                    #         encoder_hidden_states = batch[0][1]
-
                     with text_enc_context:
                         if args.train_text_encoder:
                             # Duplicate batch tensor to prevent irreparably damaging it's token data
                             n_batch = batch[0][1].clone().detach()
-                            if max_token_extension > 1: # Handle models that want 75 * x tokens available.
-                                max_length = tokenizer.model_max_length
-                                max_standard_tokens = max_length - 2
-                                max_len = np.ceil(max(len(x) for x in batch[0][1]) / max_standard_tokens).astype(int).item() * max_standard_tokens
-                                if max_len > max_standard_tokens:
-                                    z = None
-                                    for i, x in enumerate(n_batch):
-                                        if len(x) < max_len:
-                                            n_batch[i] = [*x, *np.full((max_len - len(x)), tokenizer.eos_token_id)]
-                                            
-                                    # Recommended over torch.tensor()
-                                    batch_t = n_batch.clone().detach().to(accelerator.device)
-                                    chunks = [batch_t[:, i:i + max_standard_tokens] for i in range(0, max_len, max_standard_tokens)]
-                                    for chunk in chunks:
-                                        chunk = chunk.to(accelerator.device)
-                                        chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1)
-                                        if z is None:
-                                            if args.clip_penultimate:
-                                                encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
-                                                z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
-                                                del encode
-                                            else:
-                                                encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
-                                                z = encode.last_hidden_state
-                                                del encode
-                                        else:
-                                            if args.clip_penultimate:
-                                                encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
-                                                z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
-                                                del encode
-                                            else:
-                                                encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
-                                                z = torch.cat((z, encode.last_hidden_state), dim=-2)
-                                                del encode
-                                        del chunk
-                                    n_batch = z
-                                    del z
-                                else:
-                                    for i, x in enumerate(n_batch):
-                                        batch["input_ids"][i] = [tokenizer.bos_token_id, *x, *np.full((tokenizer.model_max_length - len(x) - 1), tokenizer.eos_token_id)]
+                            max_length = tokenizer.model_max_length
+                            max_standard_tokens = max_length - 2
+                            max_len = np.ceil(max(len(x) for x in batch[0][1]) / max_standard_tokens).astype(int).item() * max_standard_tokens
+                            z = None
+                            for i, x in enumerate(n_batch):
+                                if len(x) < max_len:
+                                    n_batch[i] = [*x, *np.full((max_len - len(x)), tokenizer.eos_token_id)]
+
+                            # Recommended over torch.tensor()
+                            batch_t = n_batch.clone().detach().to(accelerator.device)
+                            chunks = [batch_t[:, i:i + max_standard_tokens] for i in range(0, max_len, max_standard_tokens)]
+                            for chunk in chunks:
+                                chunk = chunk.to(accelerator.device)
+                                chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1)
+                                if z is None:
                                     if args.clip_penultimate:
-                                        encode = text_encoder(torch.asarray(n_batch), output_hidden_states=True)
-                                        encoder_hidden_states = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
+                                        encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
+                                        z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
                                         del encode
                                     else:
-                                        encode = text_encoder(torch.asarray(n_batch), output_hidden_states=True)
-                                        encoder_hidden_states = encode.last_hidden_state
+                                        encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
+                                        z = encode.last_hidden_state
                                         del encode
-                            else:
-                                for i, x in enumerate(n_batch):
-                                    for j, y in enumerate(x):
-                                        n_batch[i][j] = [tokenizer.bos_token_id, *y, *np.full((tokenizer.model_max_length - len(y) - 1), tokenizer.eos_token_id)]
-                            
-                                if args.clip_penultimate:
-                                    n_batch = [text_encoder.text_model.final_layer_norm(text_encoder(torch.asarray(input_id).to(accelerator.device), output_hidden_states=True)['hidden_states'][-2])[0] for input_id in n_batch]
                                 else:
-                                    n_batch = [text_encoder(torch.asarray(input_id).to(accelerator.device), output_hidden_states=True).last_hidden_state[0] for input_id in n_batch]
+                                    if args.clip_penultimate:
+                                        encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
+                                        z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
+                                        del encode
+                                    else:
+                                        encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
+                                        z = torch.cat((z, encode.last_hidden_state), dim=-2)
+                                        del encode
+                                del chunk
+                            n_batch = z
+                            del z
                             encoder_hidden_states = torch.stack(tuple(n_batch))
                         else:
                             encoder_hidden_states = batch[0][1]
-
                     # Predict the noise residual
                     #noise_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
                     model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
@@ -2269,6 +2227,7 @@ def main():
                         save_and_sample_weights(epoch,'epoch')
                     else:
                         save_and_sample_weights(epoch,'epoch',False)
+                    print_instructions()
             if epoch % args.save_every_n_epoch and mid_checkpoint==True or mid_sample==True:
                 if mid_checkpoint==True:
                     save_and_sample_weights(epoch,'epoch',True)
