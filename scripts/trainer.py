@@ -1795,7 +1795,7 @@ def main():
         max_len = max(len(x) for x in input_ids)
 
         # Calculate the number of chunks needed to process the input_ids in extended mode
-        num_chunks = math.ceil(max_len / 75)
+        num_chunks = math.ceil(max_len / (tokenizer.model_max_length - 2))
         # Prevent zero dimensional tensors due to zero tokens
         if num_chunks < 1:
             num_chunks = 1
