@@ -380,6 +380,7 @@ def parse_args():
     parser.add_argument('--add_sample_prompt', type=str, action='append')
     parser.add_argument('--use_image_names_as_captions', default=False, action="store_true")
     parser.add_argument('--add_mask_prompt', type=str, default=None, action="append", dest="mask_prompts")
+    parser.add_argument('--token_limit', type=int, default=75, help="Token limit, token lengths longer than the next multiple of 75 will be truncated.")
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
@@ -664,8 +665,7 @@ class AutoBucketing(Dataset):
             example["instance_prompt_ids"] = self.tokenizer(
                 image_train_tmp.caption,
                 padding="do_not_pad",
-                truncation=True,
-                max_length=self.tokenizer.model_max_length,
+                verbose=False
             ).input_ids
             image_train_item.self_destruct()
             return example
@@ -680,8 +680,7 @@ class AutoBucketing(Dataset):
             example["class_prompt_ids"] = self.tokenizer(
                 image_train_tmp.caption,
                 padding="do_not_pad",
-                truncation=True,
-                max_length=self.tokenizer.model_max_length,
+                verbose=False
             ).input_ids
             image_train_item.self_destruct()
             return example
@@ -1315,8 +1314,7 @@ class NormalDataset(Dataset):
         example["instance_prompt_ids"] = self.tokenizer(
             instance_prompt,
             padding="do_not_pad",
-            truncation=True,
-            max_length=self.tokenizer.model_max_length,
+            verbose=False
         ).input_ids
         if self.with_prior_preservation:
             class_path, class_prompt = self.class_images_path[index % self.num_class_images]
@@ -1350,8 +1348,7 @@ class NormalDataset(Dataset):
             example["class_prompt_ids"] = self.tokenizer(
                 class_prompt,
                 padding="do_not_pad",
-                truncation=True,
-                max_length=self.tokenizer.model_max_length,
+                verbose=False
             ).input_ids
 
         return example
@@ -1790,21 +1787,28 @@ def main():
         if args.model_variant == 'depth2img':
             depth_values = torch.stack(depth)
             depth_values = depth_values.to(memory_format=torch.contiguous_format).float()
-        ### no need to do it now when it's loaded by the multiAspectsDataset
-        #if args.with_prior_preservation:
-        #    input_ids += [example["class_prompt_ids"] for example in examples]
-        #    pixel_values += [example["class_images"] for example in examples]
         
-        #print(pixel_values)
-        #unpack the pixel_values from tensor to list
-
-
         pixel_values = torch.stack(pixel_values)
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
+
+        # Find the maximum length of the input_ids and clip to the next number of 75 tokens to avoid unruly SD front ends failing.
+        max_len = max(len(x) for x in input_ids)
+
+        # Calculate the number of chunks needed to process the input_ids in extended mode
+        num_chunks = math.ceil(max_len / 75)
+        # Prevent zero dimensional tensors due to zero tokens
+        if num_chunks < 1:
+            num_chunks = 1
+
+        # Trim our total token length into multiples of 75
+        len_input = tokenizer.model_max_length - 2
+        if num_chunks > 1:
+            len_input = (tokenizer.model_max_length * num_chunks) - (num_chunks * 2)
+
         input_ids = tokenizer.pad(
             {"input_ids": input_ids},
             padding="max_length",
-            max_length=tokenizer.model_max_length,
+            max_length=len_input,
             return_tensors="pt",\
             ).input_ids
 
@@ -2445,6 +2449,13 @@ def main():
         #lambda set mid_generation to true
         frozen_directory=args.output_dir + "/frozen_text_encoder"
 
+        # Get our limit of token chunks early.
+        token_chunks_limit = math.ceil(args.token_limit / 75)
+        if token_chunks_limit < 1:
+            token_chunks_limit = 1
+        max_length = tokenizer.model_max_length
+        max_standard_tokens = max_length - 2
+
         for epoch in range(args.num_train_epochs):
             #every 10 epochs print instructions
             unet.train()
@@ -2503,11 +2514,86 @@ def main():
                     # Get the text embedding for conditioning
                     with text_enc_context:
                         if args.train_text_encoder:
-                            if args.clip_penultimate == True:
-                                encoder_hidden_states = text_encoder(batch[0][1],output_hidden_states=True)
-                                encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
+                            tru_len = max(len(x) for x in batch[0][1])
+                            max_chunks = np.ceil(tru_len / max_standard_tokens).astype(int)
+                            max_len = max_chunks.item() * max_standard_tokens
+                            clamp_event = False
+                            #print(f"\n\n\nC:{max_chunks}, L:{max_len}, T:{tru_len}")
+                            # If we're a properly padded bunch of tokens that have come from the tokeniser padder, train normally;
+                            # otherwise we're handling a dropout batch, and thusly need to handle it the normal way. 
+                            if tru_len == max_len and max_chunks > 1:
+                                # Duplicate batch tensor to prevent irreparably damaging it's token data
+                                # Recommended over torch.tensor()
+                                n_batch = batch[0][1].clone().detach()
+                                z = None
+                                for i, x in enumerate(n_batch):
+                                    if len(x) < max_len:
+                                        n_batch[i] = [*x, *np.full((max_len - len(x)), tokenizer.eos_token_id)]
+                                    del i
+                                    del x
+
+                                chunks = [n_batch[:, i:i + max_standard_tokens] for i in range(0, max_len, max_standard_tokens)]
+                                clamp_chunk = 0
+                                for chunk in chunks:
+                                    # Hard limit the tokens to fit in memory for the rare event that latent caches that somehow exceed the limit.
+                                    if clamp_chunk > (token_chunks_limit):
+                                        #print("\nWARNING: Clamped abnormal amount of tokens.\n")
+                                        clamp_event = True
+                                        del chunk
+                                        break
+                                    # If we're close to reaching our limit of tokens, force a cache cleaning, and continue
+                                    elif clamp_chunk > (token_chunks_limit - 1):
+                                        clamp_event = True
+
+                                    chunk = chunk.to(accelerator.device)
+                                    chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1)
+                                    if z is None:
+                                        if args.clip_penultimate:
+                                            encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
+                                            z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
+                                            del encode
+                                        else:
+                                            encode = text_encoder(chunk.to(accelerator.device))[0]
+                                            z = encode
+                                            del encode
+                                    else:
+                                        if args.clip_penultimate:
+                                            encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
+                                            z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
+                                            del encode
+                                        else:
+                                            encode = text_encoder(chunk.to(accelerator.device))[0]
+                                            z = torch.cat((z, encode.last_hidden_state), dim=-2)
+                                            del encode
+
+                                    clamp_chunk += 1
+                                    del chunk
+                                encoder_hidden_states = torch.stack(tuple(z))
+                                del n_batch
+                                del tru_len
+                                del max_chunks
+                                del max_len
+                                del z
+                                del chunks
+                                del clamp_chunk
                             else:
-                                encoder_hidden_states = text_encoder(batch[0][1])[0]
+                                if args.clip_penultimate == True:
+                                    encoder_hidden_states = text_encoder(batch[0][1],output_hidden_states=True)
+                                    encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
+                                else:
+                                    encoder_hidden_states = text_encoder(batch[0][1])[0]
+                            # Clear cache to prevent memory leakage every now and then
+                            # Clear Python GC and accelerator cache less often than PyTorch cache and when we're using lots of tokens
+                            if global_step % 500 or clamp_event:
+                                del clamp_event
+                                gc.collect()
+                                torch.cuda.empty_cache()
+                                accelerator.free_memory()                    
+                            elif global_step % 100 == 0:
+                                torch.cuda.empty_cache()
+                                del clamp_event
+                            else:
+                                del clamp_event
                         else:
                             encoder_hidden_states = batch[0][1]
 
