@@ -2450,11 +2450,11 @@ def main():
         frozen_directory=args.output_dir + "/frozen_text_encoder"
 
         # Get our limit of token chunks early.
-        if token_chunks_limit < 1:
-            token_chunks_limit = 1
         max_length = tokenizer.model_max_length
         max_standard_tokens = max_length - 2
         token_chunks_limit = math.ceil(args.token_limit / max_standard_tokens)
+        if token_chunks_limit < 1:
+            token_chunks_limit = 1
 
         for epoch in range(args.num_train_epochs):
             #every 10 epochs print instructions
