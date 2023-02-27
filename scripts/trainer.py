@@ -1875,6 +1875,7 @@ def main():
     elif args.mixed_precision == "tf32":
         weight_dtype = torch.float32
         torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
         #torch.set_float32_matmul_precision("medium")
 
     # Move text_encode and vae to gpu.
@@ -2243,16 +2244,15 @@ def main():
                 
                 if args.stop_text_encoder_training == True:
                     save_dir = frozen_directory
-                if step != 0:
-                    if save_model:
-                        pipeline.save_pretrained(save_dir,safe_serialization=True)
-                        with open(os.path.join(save_dir, "args.json"), "w") as f:
-                                json.dump(args.__dict__, f, indent=2)
-                    if args.stop_text_encoder_training == True:
-                        #delete every folder in frozen_directory but the text encoder
-                        for folder in os.listdir(save_dir):
-                            if folder != "text_encoder" and os.path.isdir(os.path.join(save_dir, folder)):
-                                shutil.rmtree(os.path.join(save_dir, folder))
+                if save_model:
+                    pipeline.save_pretrained(save_dir,safe_serialization=True)
+                    with open(os.path.join(save_dir, "args.json"), "w") as f:
+                            json.dump(args.__dict__, f, indent=2)
+                if args.stop_text_encoder_training == True:
+                    #delete every folder in frozen_directory but the text encoder
+                    for folder in os.listdir(save_dir):
+                        if folder != "text_encoder" and os.path.isdir(os.path.join(save_dir, folder)):
+                            shutil.rmtree(os.path.join(save_dir, folder))
                 imgs = []
                 if args.add_sample_prompt is not None or batch_prompts != [] and args.stop_text_encoder_training != True:
                     prompts = []
@@ -2549,21 +2549,21 @@ def main():
                                     chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1)
                                     if z is None:
                                         if args.clip_penultimate:
-                                            encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
+                                            encode = text_encoder(chunk, output_hidden_states=True)
                                             z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
                                             del encode
                                         else:
-                                            encode = text_encoder(chunk.to(accelerator.device))[0]
+                                            encode = text_encoder(chunk)[0]
                                             z = encode
                                             del encode
                                     else:
                                         if args.clip_penultimate:
-                                            encode = text_encoder(chunk.to(accelerator.device), output_hidden_states=True)
+                                            encode = text_encoder(chunk, output_hidden_states=True)
                                             z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
                                             del encode
                                         else:
-                                            encode = text_encoder(chunk.to(accelerator.device))[0]
-                                            z = torch.cat((z, encode.last_hidden_state), dim=-2)
+                                            encode = text_encoder(chunk)[0]
+                                            z = torch.cat((z, encode), dim=-2)
                                             del encode
 
                                     clamp_chunk += 1
@@ -2584,16 +2584,19 @@ def main():
                                     encoder_hidden_states = text_encoder(batch[0][1])[0]
                             # Clear cache to prevent memory leakage every now and then
                             # Clear Python GC and accelerator cache less often than PyTorch cache and when we're using lots of tokens
-                            if global_step % 500 or clamp_event:
-                                del clamp_event
-                                gc.collect()
-                                torch.cuda.empty_cache()
-                                accelerator.free_memory()                    
-                            elif global_step % 100 == 0:
-                                torch.cuda.empty_cache()
-                                del clamp_event
-                            else:
-                                del clamp_event
+                            #if global_step % 2500:
+                               # del clamp_event
+                               # gc.collect()
+                                #torch.cuda.empty_cache()
+                                #accelerator.free_memory()
+                                #print("Clamp event")
+                            # elif global_step % 100 == 0:
+                            #     torch.cuda.empty_cache()
+                            #     #accelerator.free_memory()                    
+                            #     del clamp_event
+                            #     print("100 steps event")
+                            #else:
+                            del clamp_event
                         else:
                             encoder_hidden_states = batch[0][1]
 
@@ -2609,7 +2612,7 @@ def main():
                     elif args.model_variant == 'depth2img':
                         noisy_latents = torch.cat([noisy_latents, depth], dim=1)
                         model_pred = unet(noisy_latents, timesteps, encoder_hidden_states, depth).sample
-                    elif args.model_variant == "base":
+                    else: #args.model_variant == "base":
                         model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
                     
 
@@ -2622,7 +2625,7 @@ def main():
                         raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
                     if args.model_variant == "inpainting":
                         del timesteps, noise, latents, noisy_latents,noisy_inpaint_latents, encoder_hidden_states
-                    elif args.model_variant == "base":
+                    else: #args.model_variant == "base":
                         del timesteps, noise, latents, noisy_latents, encoder_hidden_states
                     if args.with_prior_preservation:
                         # Chunk the noise and noise_pred into two parts and compute the loss on each part separately.
@@ -2666,8 +2669,6 @@ def main():
                     logs = {"loss": loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
                     progress_bar.set_postfix(**logs)
                     accelerator.log(logs, step=global_step)
-                
-                
 
                 if global_step > 0 and not global_step % args.sample_step_interval and epoch != 0:
                     save_and_sample_weights(global_step,'step',save_model=False)
@@ -2698,14 +2699,7 @@ def main():
                 save_and_sample_weights(epoch,'quit_epoch')
                 quit()
             if not epoch % args.save_every_n_epoch:
-                if args.save_every_n_epoch == 1 and epoch == 0:
-                    save_and_sample_weights(epoch,'epoch')
-                if epoch != 0:
-                    save_and_sample_weights(epoch,'epoch')
-                else:
-                    pass
-                    #save_and_sample_weights(epoch,'epoch',False)
-                    print_instructions()
+                save_and_sample_weights(epoch,'epoch')
             if epoch % args.save_every_n_epoch and mid_checkpoint==True or mid_sample==True:
                 if mid_checkpoint==True:
                     save_and_sample_weights(epoch,'epoch',True)

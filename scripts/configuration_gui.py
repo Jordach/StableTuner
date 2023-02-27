@@ -364,7 +364,8 @@ class ConceptWindow(ctk.CTkToplevel):
         icon = Image.open(icon)
         #resize the image
         image = icon.resize((150, 150), Image.Resampling.LANCZOS)
-        if path != "" and path != None:
+        enable_preview_icon = False
+        if path != "" and path != None and enable_preview_icon:
             if os.path.exists(path):
                 files = []
                 #if there are sub directories in the path
@@ -2422,7 +2423,8 @@ class App(ctk.CTk):
         icon = Image.open(icon)
         #resize the image
         image = icon.resize((150, 150), Image.Resampling.LANCZOS)
-        if path != "":
+        enable_preview_image = False
+        if path != "" and enable_preview_image:
             if os.path.exists(path):
                 files = os.listdir(path)
                 for i in range(4):
@@ -2598,49 +2600,51 @@ class App(ctk.CTk):
         #resize the image
         image = icon.resize((150, 150), Image.Resampling.LANCZOS)
         image_preview = ImageTk.PhotoImage(image)
-        if inst_data_path_val != None:
-            if os.path.exists(inst_data_path_val):
-                del image_preview
-                #get 4 images from the path
-                #create a host image 
-                image = Image.new("RGB", (150, 150), "white")
-                files = os.listdir(inst_data_path_val)
-                if len(files) > 0:
-                    for i in range(4):
-                        #get an image from the path
-                        import random
-                        
-                        #filter files for images
-                        files = [f for f in files if f.endswith(".jpg") or f.endswith(".png") or f.endswith(".jpeg")]
-                        rand = random.choice(files)
-                        image_path = os.path.join(inst_data_path_val,rand)
-                        #remove image_path from files
-                        if len(files) > 4:
-                            files.remove(rand)
-                        #files.pop(image_path)
-                        #open the image
-                        #print(image_path)
-                        image_to_add = Image.open(image_path)
-                        #resize the image to 38x38
-                        #resize to 150x150 closest to the original aspect ratio
-                        image_to_add.thumbnail((150, 150), Image.Resampling.LANCZOS)
-                        #decide where to put the image
-                        if i == 0:
-                            #top left
-                            image.paste(image_to_add, (0, 0))
-                        elif i == 1:
-                            #top right
-                            image.paste(image_to_add, (76, 0))
-                        elif i == 2:
-                            #bottom left
-                            image.paste(image_to_add, (0, 76))
-                        elif i == 3:
-                            #bottom right
-                            image.paste(image_to_add, (76, 76))
-                    #convert the image to a photoimage
-                    #image.show()
-                    image_preview = ctk.CTkImage(image)
-                    #add the image to the canvas
+        enable_img_preview = False
+        if enable_img_preview:
+            if inst_data_path_val != None:
+                if os.path.exists(inst_data_path_val):
+                    del image_preview
+                    #get 4 images from the path
+                    #create a host image 
+                    image = Image.new("RGB", (150, 150), "white")
+                    files = os.listdir(inst_data_path_val)
+                    if len(files) > 0 and len(files <= 2500):
+                        for i in range(4):
+                            #get an image from the path
+                            import random
+                            
+                            #filter files for images
+                            files = [f for f in files if f.endswith(".jpg") or f.endswith(".png") or f.endswith(".jpeg")]
+                            rand = random.choice(files)
+                            image_path = os.path.join(inst_data_path_val,rand)
+                            #remove image_path from files
+                            if len(files) > 4:
+                                files.remove(rand)
+                            #files.pop(image_path)
+                            #open the image
+                            #print(image_path)
+                            image_to_add = Image.open(image_path)
+                            #resize the image to 38x38
+                            #resize to 150x150 closest to the original aspect ratio
+                            image_to_add.thumbnail((150, 150), Image.Resampling.LANCZOS)
+                            #decide where to put the image
+                            if i == 0:
+                                #top left
+                                image.paste(image_to_add, (0, 0))
+                            elif i == 1:
+                                #top right
+                                image.paste(image_to_add, (76, 0))
+                            elif i == 2:
+                                #bottom left
+                                image.paste(image_to_add, (0, 76))
+                            elif i == 3:
+                                #bottom right
+                                image.paste(image_to_add, (76, 76))
+                        #convert the image to a photoimage
+                        #image.show()
+                        image_preview = ctk.CTkImage(image)
+                        #add the image to the canvas
 
         
         image_container = image_preview_canvas.create_image(0, 0, anchor="nw", image=image_preview)

@@ -1,0 +1,35 @@
+accelerate launch --mixed_precision="fp16" scripts/trainer.py \
+  --attention="xformers" \
+  --model_variant="base" \
+  --disable_cudnn_benchmark \
+  --use_text_files_as_captions \
+  --sample_step_interval=1000000 \
+  --pretrained_model_name_or_path="runwayml/stable-diffusion-v1-5" \
+  --pretrained_vae_name_or_path=""  \
+  --output_dir="output/fluff_proto"  \
+  --seed=3434554  \
+  --resolution=512  \
+  --train_batch_size=20  \
+  --num_train_epochs=20  \
+  --mixed_precision="fp16" \
+  --use_bucketing \
+  --aspect_mode="add" \
+  --aspect_mode_action_preference="add" \
+  --use_8bit_adam \
+  --gradient_checkpointing \
+  --gradient_accumulation_steps=1 \
+  --learning_rate=5e-6 \
+  --lr_warmup_steps=0 \
+  --lr_scheduler="constant" \
+  --regenerate_latent_cache \
+  --train_text_encoder \
+  --token_limit=1500 \
+  --concepts_list="stabletune_concept_list.json" \
+  --num_class_images=200 \
+  --save_every_n_epoch=1 \
+  --n_save_sample=1 \
+  --sample_height=512 \
+  --sample_width=512 \
+  --dataset_repeats=1 \
+  --clip_penultimate \
+  --use_ema
