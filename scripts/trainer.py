@@ -70,7 +70,7 @@ def parse_args():
     parser.add_argument(
         "--attention",
         type=str,
-        choices=["xformers", "flash_attention"],
+        choices=["xformers", "flash_attention", "unfuck_tf32"],
         default="xformers",
         help="Type of attention to use."
     )
