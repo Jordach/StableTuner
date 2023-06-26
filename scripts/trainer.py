@@ -35,6 +35,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from diffusers import AutoencoderKL, DDIMScheduler, DDPMScheduler, DiffusionPipeline, UNet2DConditionModel,DiffusionPipeline, DPMSolverMultistepScheduler,EulerDiscreteScheduler
+#from diffusers.training_utils import EMAModel
 from diffusers.optimization import get_scheduler
 from huggingface_hub import HfFolder, Repository, whoami
 from torchvision import transforms
@@ -70,7 +71,7 @@ def parse_args():
     parser.add_argument(
         "--attention",
         type=str,
-        choices=["xformers", "flash_attention", "unfuck_tf32"],
+        choices=["xformers", "flash_attention"],
         default="xformers",
         help="Type of attention to use."
     )
@@ -381,6 +382,11 @@ def parse_args():
     parser.add_argument('--use_image_names_as_captions', default=False, action="store_true")
     parser.add_argument('--add_mask_prompt', type=str, default=None, action="append", dest="mask_prompts")
     parser.add_argument('--token_limit', type=int, default=75, help="Token limit, token lengths longer than the next multiple of 75 will be truncated.")
+    parser.add_argument('--use_latents_only', default=False, action="store_true")
+    parser.add_argument('--epoch_seed', default=False, action="store_true")
+    parser.add_argument("--min_snr_gamma", type=float, default=None, help="gamma for reducing the weight of high loss timesteps. Lower numbers have stronger effect. 5 is recommended by paper.")
+    parser.add_argument('--with_pertubation_noise', default=False, action="store_true")
+    parser.add_argument("--perturbation_noise_weight", type=float, default=0.1, help="The weight of perturbation noise applied during training.")
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
@@ -463,14 +469,22 @@ ASPECT_704 = [[704,704],     # 501,376 1:1
     [1536,320],[320,1536], # 491,520 4.8:1
 ]
 
-ASPECT_640 = [[640,640],     # 409600 1:1 
-    [704,576],[576,704],   # 405504 1.25:1
+ASPECT_640 = [[640,640],   # 409600 1:1 
+    [680,544],[544,680],   # 369920 1.25:1
+    [720,544],[544,720],   # 391680 1.33:1
     [768,512],[512,768],   # 393216 1.5:1
+    [840,480],[480,840],   # 403200 1.75:1
     [896,448],[448,896],   # 401408 2:1
-    [1024,384],[384,1024], # 393216 2.667:1
+    [936,416],[416,936],   # 389376 2.25:1
+    [1000,400],[400,1000], # 400000 2.5:1
+    [1056,384],[384,1056], # 405504 2.75:1
+    [1104,368],[368,1104], # 406272 3:1
+    [1144,352],[352,1144], # 402688 3.25:1
+    [1176,336],[336,1176], # 395136 3.5:1
     [1280,320],[320,1280], # 409600 4:1
-    [1408,256],[256,1408], # 360448 5.5:1
-    [1472,256],[256,1472], # 376832 5.75:1
+    [1296,288],[288,1296], # 373248 4.5:1
+    [1400,280],[280,1400], # 392000 5:1
+    [1496,272],[272,1496], # 406912 5.5:1
     [1536,256],[256,1536], # 393216 6:1
     [1600,256],[256,1600], # 409600 6.25:1
 ]
@@ -1019,6 +1033,17 @@ class DataLoaderMultiAspect():
             truncate_amount = bucket_len % batch_size
             add_amount = batch_size - bucket_len % batch_size
             action = None
+            bratio = ""
+            bmode = ""
+            if bucket[0] <= bucket[1]:
+                bratio = bucket[1] / bucket[0]
+                if bratio == 1:
+                    bmode = f"(1:1)"
+                else:
+                    bmode = f"(1:{bratio:.2f})"
+            else:
+                bratio = bucket[0] / bucket[1]
+                bmode = f"({bratio:.2f}:1)"
             #print(f" ** Bucket {bucket} has {bucket_len} images")
             if aspect_mode == 'dynamic':
                 if batch_size == bucket_len:
@@ -1048,7 +1073,7 @@ class DataLoaderMultiAspect():
             if action == None:
                 #print('test')
                 current_bucket_size = bucket_len
-                print(f"  ** Bucket {bucket} found {bucket_len}, nice!")
+                print(f"  ** Bucket {bucket} ({bmode}) found {bucket_len}, nice!")
             elif action == 'add':
                 #copy the bucket
                 shuffleBucket = random.sample(buckets[bucket], bucket_len)
@@ -1064,14 +1089,14 @@ class DataLoaderMultiAspect():
                         #print(str(randomIndex))
                         buckets[bucket].append(shuffleBucket[randomIndex])
                         added+=1
-                    print(f"  ** Bucket {bucket} found {bucket_len} images, will {bcolors.OKCYAN}duplicate {added} images{bcolors.ENDC} due to batch size {bcolors.WARNING}{batch_size}{bcolors.ENDC}")
+                    print(f"  ** Bucket {bucket} ({bmode}) found {bucket_len}  images, will {bcolors.OKCYAN}duplicate {added} images{bcolors.ENDC} due to batch size {bcolors.WARNING}{batch_size}{bcolors.ENDC}")
                 else:
-                    print(f"  ** Bucket {bucket} found {bucket_len}, {bcolors.OKGREEN}nice!{bcolors.ENDC}")
+                    print(f"  ** Bucket {bucket} ({bmode}) found {bucket_len}, {bcolors.OKGREEN}nice!{bcolors.ENDC}")
             elif action == 'truncate':
                 truncate_count = (bucket_len) % batch_size
                 current_bucket_size = bucket_len
                 buckets[bucket] = buckets[bucket][:current_bucket_size - truncate_count]
-                print(f"  ** Bucket {bucket} found {bucket_len} images, will {bcolors.FAIL}drop {truncate_count} images{bcolors.ENDC} due to batch size {bcolors.WARNING}{batch_size}{bcolors.ENDC}")
+                print(f"  ** Bucket {bucket} found {bucket_len} ({bmode}) images, will {bcolors.FAIL}drop {truncate_count} images{bcolors.ENDC} due to batch size {bcolors.WARNING}{batch_size}{bcolors.ENDC}")
             
 
         # flatten the buckets
@@ -1613,7 +1638,7 @@ def main():
                         safety_checker=None,
                         vae=AutoencoderKL.from_pretrained(args.pretrained_vae_name_or_path or args.pretrained_model_name_or_path,subfolder=None if args.pretrained_vae_name_or_path else "vae" ,safe_serialization=True),
                         torch_dtype=torch_dtype,
-                         
+                        requires_safety_checker=False
                     )
                     pipeline.set_progress_bar_config(disable=True)
                     pipeline.to(accelerator.device)
@@ -1675,6 +1700,9 @@ def main():
         tu.replace_unet_cross_attn_to_flash_attention()
     if args.use_ema == True:
         ema_unet = tu.EMAModel(unet.parameters())
+        # This apparently saves a lot of memory
+        #for param in ema_unet.parameters():
+            #param.requires_grad = False
     if args.model_variant == "depth2img":
         d2i = tu.Depth2Img(unet,text_encoder,args.mixed_precision,args.pretrained_model_name_or_path,accelerator)
     vae.requires_grad_(False)
@@ -1725,41 +1753,45 @@ def main():
     )
     noise_scheduler = DDPMScheduler.from_config(args.pretrained_model_name_or_path, subfolder="scheduler")
 
-    if args.use_bucketing:
-        train_dataset = AutoBucketing(
+    if not args.use_latents_only or args.regenerate_latent_cache:
+        if args.use_bucketing:
+            train_dataset = AutoBucketing(
+                concepts_list=args.concepts_list,
+                use_image_names_as_captions=args.use_image_names_as_captions,
+                batch_size=args.train_batch_size,
+                tokenizer=tokenizer,
+                add_class_images_to_dataset=args.add_class_images_to_dataset,
+                balance_datasets=args.auto_balance_concept_datasets,
+                resolution=args.resolution,
+                with_prior_loss=False,#args.with_prior_preservation,
+                repeats=args.dataset_repeats,
+                use_text_files_as_captions=args.use_text_files_as_captions,
+                aspect_mode=args.aspect_mode,
+                action_preference=args.aspect_mode_action_preference,
+                seed=args.seed,
+                model_variant=args.model_variant,
+                extra_module=None if args.model_variant != "depth2img" else d2i,
+                mask_prompts=args.mask_prompts,
+            )
+        else:
+            train_dataset = NormalDataset(
             concepts_list=args.concepts_list,
-            use_image_names_as_captions=args.use_image_names_as_captions,
-            batch_size=args.train_batch_size,
             tokenizer=tokenizer,
-            add_class_images_to_dataset=args.add_class_images_to_dataset,
-            balance_datasets=args.auto_balance_concept_datasets,
-            resolution=args.resolution,
-            with_prior_loss=False,#args.with_prior_preservation,
+            with_prior_preservation=args.with_prior_preservation,
+            size=args.resolution,
+            center_crop=args.center_crop,
+            num_class_images=args.num_class_images,
+            use_image_names_as_captions=args.use_image_names_as_captions,
             repeats=args.dataset_repeats,
             use_text_files_as_captions=args.use_text_files_as_captions,
-            aspect_mode=args.aspect_mode,
-            action_preference=args.aspect_mode_action_preference,
-            seed=args.seed,
+            seed = args.seed,
             model_variant=args.model_variant,
             extra_module=None if args.model_variant != "depth2img" else d2i,
             mask_prompts=args.mask_prompts,
         )
     else:
-        train_dataset = NormalDataset(
-        concepts_list=args.concepts_list,
-        tokenizer=tokenizer,
-        with_prior_preservation=args.with_prior_preservation,
-        size=args.resolution,
-        center_crop=args.center_crop,
-        num_class_images=args.num_class_images,
-        use_image_names_as_captions=args.use_image_names_as_captions,
-        repeats=args.dataset_repeats,
-        use_text_files_as_captions=args.use_text_files_as_captions,
-        seed = args.seed,
-        model_variant=args.model_variant,
-        extra_module=None if args.model_variant != "depth2img" else d2i,
-        mask_prompts=args.mask_prompts,
-    )
+        print("Notice: Running from latent cache only!")
+
     def collate_fn(examples):
         #print(examples)
         #print('test')
@@ -1831,39 +1863,51 @@ def main():
                 "tokens" : tokens
             }
         return batch
+    
+    if not args.use_latents_only or args.regenerate_latent_cache:
+        train_dataloader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=args.train_batch_size, shuffle=False, collate_fn=collate_fn, pin_memory=True
+        )
+        #get the length of the dataset
+        train_dataset_length = len(train_dataset)
+        #code to check if latent cache needs to be resaved
+        #check if last_run.json file exists in logging_dir
+        if os.path.exists(logging_dir / "last_run.json"):
+            #if it exists, load it
+            with open(logging_dir / "last_run.json", "r") as f:
+                last_run = json.load(f)
+                last_run_batch_size = last_run["batch_size"]
+                last_run_dataset_length = last_run["dataset_length"]
+                if last_run_batch_size != args.train_batch_size:
+                    print(f" {bcolors.WARNING}The batch_size has changed since the last run. Regenerating Latent Cache.{bcolors.ENDC}") 
 
-    train_dataloader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.train_batch_size, shuffle=False, collate_fn=collate_fn, pin_memory=True
-    )
-    #get the length of the dataset
-    train_dataset_length = len(train_dataset)
-    #code to check if latent cache needs to be resaved
-    #check if last_run.json file exists in logging_dir
-    if os.path.exists(logging_dir / "last_run.json"):
-        #if it exists, load it
-        with open(logging_dir / "last_run.json", "r") as f:
-            last_run = json.load(f)
-            last_run_batch_size = last_run["batch_size"]
-            last_run_dataset_length = last_run["dataset_length"]
-            if last_run_batch_size != args.train_batch_size:
-                print(f" {bcolors.WARNING}The batch_size has changed since the last run. Regenerating Latent Cache.{bcolors.ENDC}") 
+                    args.regenerate_latent_cache = True
+                    #save the new batch_size and dataset_length to last_run.json
+                if last_run_dataset_length != train_dataset_length:
+                    print(f" {bcolors.WARNING}The dataset length has changed since the last run. Regenerating Latent Cache.{bcolors.ENDC}") 
 
-                args.regenerate_latent_cache = True
-                #save the new batch_size and dataset_length to last_run.json
-            if last_run_dataset_length != train_dataset_length:
-                print(f" {bcolors.WARNING}The dataset length has changed since the last run. Regenerating Latent Cache.{bcolors.ENDC}") 
-
-                args.regenerate_latent_cache = True
-                #save the new batch_size and dataset_length to last_run.json
-        with open(logging_dir / "last_run.json", "w") as f:
-            json.dump({"batch_size": args.train_batch_size, "dataset_length": train_dataset_length}, f)
-                
+                    args.regenerate_latent_cache = True
+                    #save the new batch_size and dataset_length to last_run.json
+            with open(logging_dir / "last_run.json", "w") as f:
+                json.dump({"batch_size": args.train_batch_size, "dataset_length": train_dataset_length}, f)
+                    
+        else:
+            #if it doesn't exist, create it
+            last_run = {"batch_size": args.train_batch_size, "dataset_length": train_dataset_length}
+            #create the file
+            with open(logging_dir / "last_run.json", "w") as f:
+                json.dump(last_run, f)
     else:
-        #if it doesn't exist, create it
-        last_run = {"batch_size": args.train_batch_size, "dataset_length": train_dataset_length}
-        #create the file
-        with open(logging_dir / "last_run.json", "w") as f:
-            json.dump(last_run, f)
+        if os.path.exists(logging_dir / "last_run.json"):
+            #if it exists, load it
+            with open(logging_dir / "last_run.json", "r") as f:
+                last_run = json.load(f)
+                last_run_batch_size = last_run["batch_size"]
+                if last_run_batch_size != args.train_batch_size:
+                    print(f" {bcolors.WARNING}The batch_size has changed since the last run.{bcolors.ENDC}") 
+                    raise Exception("Cannot comply, as mixed latent lengths may be present, please regenerate them.")
+        else:
+            raise Exception("Cannot comply, last_run.json not found.")
 
     
     if args.mixed_precision == "fp16":
@@ -1875,7 +1919,6 @@ def main():
     elif args.mixed_precision == "tf32":
         weight_dtype = torch.float32
         torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
         #torch.set_float32_matmul_precision("medium")
 
     # Move text_encode and vae to gpu.
@@ -1903,21 +1946,16 @@ def main():
     args = args,)
 
     gen_cache = False
-    data_len = len(train_dataloader)
+    #data_len = len(train_dataloader)
     latent_cache_dir = Path(args.output_dir, "logs", "latent_cache")
-    #check if latents_cache.pt exists in the output_dir
-    if not os.path.exists(latent_cache_dir):
-        os.makedirs(latent_cache_dir)
-    for i in range(0,data_len-1):
-        if not os.path.exists(os.path.join(latent_cache_dir, f"latents_cache_{i}.pt")):
-            gen_cache = True
-            break
-    if args.regenerate_latent_cache == True:
-            files = os.listdir(latent_cache_dir)
-            gen_cache = True
-            for file in files:
-                os.remove(os.path.join(latent_cache_dir,file))
-    if gen_cache == False :
+        #check if latents_cache.pt exists in the output_dir
+    if args.use_latents_only and not args.regenerate_latent_cache:
+        if not os.path.exists(latent_cache_dir):
+            raise Exception("Cannot load latents when the latents folder does not exist.")
+
+        if len(os.listdir(latent_cache_dir)) == 0:
+            raise Exception("Cannot load latents when there are no latent caches.")
+
         print(f" {bcolors.OKGREEN}Loading Latent Cache from {latent_cache_dir}{bcolors.ENDC}")
         del vae
         if not args.train_text_encoder:
@@ -1925,57 +1963,84 @@ def main():
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
-        #load all the cached latents into a single dataset
-        for i in range(0,data_len-1):
-            cached_dataset.add_pt_cache(os.path.join(latent_cache_dir,f"latents_cache_{i}.pt"))
-    if gen_cache == True:
-        #delete all the cached latents if they exist to avoid problems
-        print(f" {bcolors.WARNING}Generating latents cache...{bcolors.ENDC}")
-        train_dataset = LatentsDataset([], [], [], [], [])
-        counter = 0
-        ImageFile.LOAD_TRUNCATED_IMAGES = True
-        with torch.no_grad():
-            for batch in tqdm(train_dataloader, desc="Caching latents", bar_format='%s{l_bar}%s%s{bar}%s%s{r_bar}%s'%(bcolors.OKBLUE,bcolors.ENDC, bcolors.OKBLUE, bcolors.ENDC,bcolors.OKBLUE,bcolors.ENDC,)):
-                cached_conditioning_latent = None
-                cached_extra = None
-                batch["pixel_values"] = batch["pixel_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
-                batch["input_ids"] = batch["input_ids"].to(accelerator.device, non_blocking=True)
-                if args.model_variant == "inpainting":
-                    batch["extra_values"] = batch["extra_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
-                    cached_conditioning_latent = vae.encode(batch["pixel_values"] * (1 - batch["extra_values"])).latent_dist
-                    cached_extra = functional.resize(batch["extra_values"], size=cached_conditioning_latent.mean.shape[2:])
-                if args.model_variant == "depth2img":
-                    batch["extra_values"] = batch["extra_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
-                    cached_conditioning_latent = vae.encode(batch["pixel_values"] * (1 - batch["extra_values"])).latent_dist
-                    cached_extra = functional.resize(batch["extra_values"], size=cached_conditioning_latent.mean.shape[2:])
-                cached_latent = vae.encode(batch["pixel_values"]).latent_dist
-                if args.train_text_encoder:
-                    cached_text_enc = batch["input_ids"]
-                else:
-                    cached_text_enc = text_encoder(batch["input_ids"])[0]
-                train_dataset.add_latent(cached_latent, cached_text_enc, cached_conditioning_latent, cached_extra, batch["tokens"])
-                del batch
-                del cached_latent
-                del cached_text_enc
-                del cached_conditioning_latent
-                del cached_extra
-                torch.save(train_dataset, os.path.join(latent_cache_dir,f"latents_cache_{counter}.pt"))
-                cached_dataset.add_pt_cache(os.path.join(latent_cache_dir,f"latents_cache_{counter}.pt"))
-                counter += 1
-                train_dataset = LatentsDataset([], [], [], [], [])
-                #if counter % 300 == 0:
-                    #train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=1, collate_fn=lambda x: x, shuffle=False)
-                #    gc.collect()
-                #    torch.cuda.empty_cache()
-                #    accelerator.free_memory()
 
-        #clear vram after caching latents
-        del vae
-        if not args.train_text_encoder:
-            del text_encoder
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.ipc_collect()
+        data_len = len(os.listdir(latent_cache_dir))
+        #load all the cached latents into a single dataset
+        for i in os.listdir(latent_cache_dir):
+            cached_dataset.add_pt_cache(os.path.join(latent_cache_dir, i))
+
+    else:
+        data_len = len(train_dataloader)
+        if not os.path.exists(latent_cache_dir):
+            os.makedirs(latent_cache_dir)
+        for i in range(0,data_len-1):
+            if not os.path.exists(os.path.join(latent_cache_dir, f"latents_cache_{i}.pt")):
+                gen_cache = True
+                break
+        if args.regenerate_latent_cache:
+                files = os.listdir(latent_cache_dir)
+                gen_cache = True
+                for file in files:
+                    os.remove(os.path.join(latent_cache_dir,file))
+        if gen_cache == False :
+            print(f" {bcolors.OKGREEN}Loading Latent Cache from {latent_cache_dir}{bcolors.ENDC}")
+            del vae
+            if not args.train_text_encoder:
+                del text_encoder
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+            #load all the cached latents into a single dataset
+            for i in range(0,data_len-1):
+                cached_dataset.add_pt_cache(os.path.join(latent_cache_dir,f"latents_cache_{i}.pt"))
+        if gen_cache == True:
+            #delete all the cached latents if they exist to avoid problems
+            print(f" {bcolors.WARNING}Generating latents cache...{bcolors.ENDC}")
+            train_dataset = LatentsDataset([], [], [], [], [])
+            counter = 0
+            ImageFile.LOAD_TRUNCATED_IMAGES = True
+            with torch.no_grad():
+                for batch in tqdm(train_dataloader, desc="Caching latents", bar_format='%s{l_bar}%s%s{bar}%s%s{r_bar}%s'%(bcolors.OKBLUE,bcolors.ENDC, bcolors.OKBLUE, bcolors.ENDC,bcolors.OKBLUE,bcolors.ENDC,)):
+                    cached_conditioning_latent = None
+                    cached_extra = None
+                    batch["pixel_values"] = batch["pixel_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
+                    batch["input_ids"] = batch["input_ids"].to(accelerator.device, non_blocking=True)
+                    if args.model_variant == "inpainting":
+                        batch["extra_values"] = batch["extra_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
+                        cached_conditioning_latent = vae.encode(batch["pixel_values"] * (1 - batch["extra_values"])).latent_dist
+                        cached_extra = functional.resize(batch["extra_values"], size=cached_conditioning_latent.mean.shape[2:])
+                    if args.model_variant == "depth2img":
+                        batch["extra_values"] = batch["extra_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
+                        cached_conditioning_latent = vae.encode(batch["pixel_values"] * (1 - batch["extra_values"])).latent_dist
+                        cached_extra = functional.resize(batch["extra_values"], size=cached_conditioning_latent.mean.shape[2:])
+                    cached_latent = vae.encode(batch["pixel_values"]).latent_dist
+                    if args.train_text_encoder:
+                        cached_text_enc = batch["input_ids"]
+                    else:
+                        cached_text_enc = text_encoder(batch["input_ids"])[0]
+                    train_dataset.add_latent(cached_latent, cached_text_enc, cached_conditioning_latent, cached_extra, batch["tokens"])
+                    del batch
+                    del cached_latent
+                    del cached_text_enc
+                    del cached_conditioning_latent
+                    del cached_extra
+                    torch.save(train_dataset, os.path.join(latent_cache_dir,f"latents_cache_{counter}.pt"))
+                    cached_dataset.add_pt_cache(os.path.join(latent_cache_dir,f"latents_cache_{counter}.pt"))
+                    counter += 1
+                    train_dataset = LatentsDataset([], [], [], [], [])
+                    #if counter % 300 == 0:
+                        #train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=1, collate_fn=lambda x: x, shuffle=False)
+                    #    gc.collect()
+                    #    torch.cuda.empty_cache()
+                    #    accelerator.free_memory()
+
+            #clear vram after caching latents
+            del vae
+            if not args.train_text_encoder:
+                del text_encoder
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
         #load all the cached latents into a single dataset
     train_dataloader = torch.utils.data.DataLoader(cached_dataset, batch_size=1, collate_fn=lambda x: x, shuffle=False)
     print(f" {bcolors.OKGREEN}Latents are ready.{bcolors.ENDC}")
@@ -2030,7 +2095,8 @@ def main():
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
     logger.info("***** Running training *****")
-    logger.info(f"  Num examples = {len(train_dataset)}")
+    if not args.use_latents_only:
+        logger.info(f"  Num examples = {len(train_dataset)}")
     logger.info(f"  Num batches each epoch = {len(train_dataloader)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
     logger.info(f"  Instantaneous batch size per device = {args.train_batch_size}")
@@ -2055,6 +2121,7 @@ def main():
         scheduler = DPMSolverMultistepScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
         unwrapped_unet = accelerator.unwrap_model(unet,True)
         if args.use_ema:
+            ema_unet.store(unwrapped_unet.parameters())
             ema_unet.copy_to(unwrapped_unet.parameters())
             
         pipeline = DiffusionPipeline.from_pretrained(
@@ -2065,6 +2132,7 @@ def main():
             safety_checker=None,
             torch_dtype=weight_dtype,
             local_files_only=False,
+            requires_safety_checker=False
         )
         pipeline.scheduler = scheduler
         if is_xformers_available() and args.attention=='xformers':
@@ -2121,6 +2189,8 @@ def main():
         print(f"{bcolors.WARNING}Gradio Session is active, Press 'F12' to resume training{bcolors.ENDC}")
         keyboard.wait('f12')
         demo.close()
+        if args.use_ema:
+            ema_unet.restore(unwrapped_unet.parameters())
         del demo
         del text_enc_model
         del unwrapped_unet
@@ -2216,6 +2286,7 @@ def main():
                 scheduler = DPMSolverMultistepScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
                 unwrapped_unet = accelerator.unwrap_model(unet,True)
                 if args.use_ema:
+                    ema_unet.store(unwrapped_unet.parameters())
                     ema_unet.copy_to(unwrapped_unet.parameters())
                     
                 pipeline = DiffusionPipeline.from_pretrained(
@@ -2226,6 +2297,7 @@ def main():
                     safety_checker=None,
                     torch_dtype=weight_dtype,
                     local_files_only=False,
+                    requires_safety_checker=False
                 )
                 pipeline.scheduler = scheduler
                 if is_xformers_available() and args.attention=='xformers':
@@ -2335,6 +2407,8 @@ def main():
                 elif save_model == False and len(imgs) > 0:
                     del imgs
                     print(f"{bcolors.OKGREEN}Samples saved to {sample_dir}{bcolors.ENDC}")
+                if args.use_ema:
+                    ema_unet.restore(unwrapped_unet.parameters())
         except Exception as e:
             print(e)
             print(f"{bcolors.FAIL} Error occured during sampling, skipping.{bcolors.ENDC}")
@@ -2507,9 +2581,13 @@ def main():
                     timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
                     timesteps = timesteps.long()
 
-                    # Add noise to the latents according to the noise magnitude at each timestep
-                    # (this is the forward diffusion process)
-                    noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+                    if args.with_pertubation_noise:
+                        # https://arxiv.org/pdf/2301.11706.pdf
+                        noisy_latents = noise_scheduler.add_noise(latents, noise + args.perturbation_noise_weight * torch.randn_like(latents), timesteps)
+                    else:
+                        # Add noise to the latents according to the noise magnitude at each timestep
+                        # (this is the forward diffusion process)
+                        noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps, device=latents.device)
 
                     # Get the text embedding for conditioning
                     with text_enc_context:
@@ -2623,10 +2701,7 @@ def main():
                         target = noise_scheduler.get_velocity(latents, noise, timesteps)
                     else:
                         raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
-                    if args.model_variant == "inpainting":
-                        del timesteps, noise, latents, noisy_latents,noisy_inpaint_latents, encoder_hidden_states
-                    else: #args.model_variant == "base":
-                        del timesteps, noise, latents, noisy_latents, encoder_hidden_states
+
                     if args.with_prior_preservation:
                         # Chunk the noise and noise_pred into two parts and compute the loss on each part separately.
                         """
@@ -2647,9 +2722,20 @@ def main():
                         target, target_prior = torch.chunk(target, 2, dim=0)
                         loss = F.mse_loss(model_pred.float(), target.float(), reduction="none").mean([1, 2, 3]).mean()
                         prior_loss = F.mse_loss(model_pred_prior.float(), target_prior.float(), reduction="mean")
-                        
                     else:
-                        loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                        if args.min_snr_gamma:
+                            loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
+                            loss = loss.mean([1, 2, 3])
+                            loss = tu.apply_snr_weight(loss, timesteps, noise_scheduler, args.min_snr_gamma)
+                            loss = loss.mean()
+                        else:
+                            loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+
+                    if args.model_variant == "inpainting":
+                        del timesteps, noise, latents, noisy_latents,noisy_inpaint_latents, encoder_hidden_states
+                    else: #args.model_variant == "base":
+                        del timesteps, noise, latents, noisy_latents, encoder_hidden_states
+
                     accelerator.backward(loss)
                     if accelerator.sync_gradients:
                         params_to_clip = (
@@ -2707,6 +2793,8 @@ def main():
                 elif mid_sample==True:
                     save_and_sample_weights(epoch,'epoch',False)
                     mid_sample=False
+            if args.seed is not None and args.epoch_seed:
+                set_seed(args.seed + (1 + epoch))
             accelerator.wait_for_everyone()
     except Exception:
         try:

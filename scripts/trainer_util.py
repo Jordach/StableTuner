@@ -27,6 +27,18 @@ def exists(val):
 def default(val, d):
     return val if exists(val) else d
 
+def apply_snr_weight(loss, timesteps, noise_scheduler, gamma): 
+    alphas_cumprod = noise_scheduler.alphas_cumprod
+    sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)
+    sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - alphas_cumprod)
+    alpha = sqrt_alphas_cumprod
+    sigma = sqrt_one_minus_alphas_cumprod
+    all_snr = (alpha / sigma) ** 2
+    snr = torch.stack([all_snr[t] for t in timesteps])
+    gamma_over_snr = torch.div(torch.ones_like(snr)*gamma,snr)
+    snr_weight = torch.minimum(gamma_over_snr,torch.ones_like(gamma_over_snr)).float() #from paper
+    loss = loss * snr_weight
+    return loss
 
 # flash attention forwards and backwards
 # https://arxiv.org/abs/2205.14135
@@ -319,7 +331,7 @@ class Depth2Img:
             image_path = Path(image_path)
         return image_path.parent / f"{image_path.stem}-depth.png"
         
-# Adapted from torch-ema https://github.com/fadel/pytorch_ema/blob/master/torch_ema/ema.py#L14 and taken from harubaru's implementation https://github.com/harubaru/waifu-diffusion
+#Adapted from torch-ema https://github.com/fadel/pytorch_ema/blob/master/torch_ema/ema.py#L14 and taken from harubaru's implementation https://github.com/harubaru/waifu-diffusion
 class EMAModel:
     """
     Exponential Moving Average of models weights
