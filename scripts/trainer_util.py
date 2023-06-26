@@ -27,7 +27,7 @@ def exists(val):
 def default(val, d):
     return val if exists(val) else d
 
-def apply_snr_weight(loss, timesteps, noise_scheduler, gamma): 
+def apply_snr_weight(loss, timesteps, noise_scheduler, gamma, adev): 
     alphas_cumprod = noise_scheduler.alphas_cumprod
     sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)
     sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - alphas_cumprod)
@@ -37,7 +37,7 @@ def apply_snr_weight(loss, timesteps, noise_scheduler, gamma):
     snr = torch.stack([all_snr[t] for t in timesteps])
     gamma_over_snr = torch.div(torch.ones_like(snr)*gamma,snr)
     snr_weight = torch.minimum(gamma_over_snr,torch.ones_like(gamma_over_snr)).float() #from paper
-    loss = loss * snr_weight
+    loss = loss * snr_weight.to(adev.device)
     return loss
 
 # flash attention forwards and backwards
