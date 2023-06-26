@@ -2725,6 +2725,7 @@ def main():
                     else:
                         if args.min_snr_gamma:
                             loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
+                            loss = loss.to(accelerator.device)
                             loss = loss.mean([1, 2, 3])
                             loss = tu.apply_snr_weight(loss, timesteps, noise_scheduler, args.min_snr_gamma)
                             loss = loss.mean()
