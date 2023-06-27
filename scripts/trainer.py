@@ -1755,10 +1755,11 @@ def main():
     )
     noise_scheduler = DDPMScheduler.from_config(args.pretrained_model_name_or_path, subfolder="scheduler")
     if args.zero_terminal_snr:
+        print(f" {bcolors.WARNING}Enforcing Zero Terminal SNR.{bcolors.ENDC}")
         noise_scheduler.betas = tu.enforce_zero_terminal_snr(noise_scheduler.betas)
 
     if args.use_latents_only:
-        print("Notice: Running from latent cache only!")
+        print(f" {bcolors.WARNING}Notice: Running from latent cache only!.{bcolors.ENDC}")
     elif not args.use_latents_only or args.regenerate_latent_cache:
         if args.use_bucketing:
             train_dataset = AutoBucketing(
