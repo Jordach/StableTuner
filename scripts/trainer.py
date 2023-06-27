@@ -1757,7 +1757,7 @@ def main():
     if args.zero_terminal_snr:
         noise_scheduler.betas = tu.enforce_zero_terminal_snr(noise_scheduler.betas)
 
-    if args.use_latents_only and not args.regenerate_latent_cache:
+    if args.use_latents_only:
         print("Notice: Running from latent cache only!")
     elif not args.use_latents_only or args.regenerate_latent_cache:
         if args.use_bucketing:
