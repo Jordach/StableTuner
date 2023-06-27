@@ -19,10 +19,8 @@ EPSILON = 1e-6
 
 # helper functions
 
-
 def exists(val):
     return val is not None
-
 
 def default(val, d):
     return val if exists(val) else d
@@ -44,8 +42,7 @@ def enforce_zero_terminal_snr(betas):
 	alphas_bar = alphas_bar_sqrt ** 2
 	alphas = alphas_bar[1:] / alphas_bar[:-1]
 	alphas = torch.cat([alphas_bar[0:1], alphas])
-	betas = 1 - alphas
-	return betas
+	return 1 - alphas
 
 def apply_snr_weight(loss, timesteps, noise_scheduler, gamma, adev): 
     alphas_cumprod = noise_scheduler.alphas_cumprod

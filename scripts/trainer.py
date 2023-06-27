@@ -387,6 +387,8 @@ def parse_args():
     parser.add_argument("--min_snr_gamma", type=float, default=None, help="gamma for reducing the weight of high loss timesteps. Lower numbers have stronger effect. 5 is recommended by paper.")
     parser.add_argument('--with_pertubation_noise', default=False, action="store_true")
     parser.add_argument("--perturbation_noise_weight", type=float, default=0.1, help="The weight of perturbation noise applied during training.")
+    parser.add_argument("--zero_terminal_snr", default=False, action="store_true", help="Enables Zero Terminal SNR, see https://arxiv.org/pdf/2305.08891.pdf - requires --force_v_pred for non SD2.1 models")
+    parser.add_argument("--force_v_pred", default=False, action="store_true", help="Force enables V Prediction for models that don't officially support it - ie SD1.5")
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
@@ -1752,6 +1754,8 @@ def main():
         eps=args.adam_epsilon,
     )
     noise_scheduler = DDPMScheduler.from_config(args.pretrained_model_name_or_path, subfolder="scheduler")
+    if args.zero_terminal_snr:
+        noise_scheduler.betas = tu.enforce_zero_terminal_snr(noise_scheduler.betas)
 
     if not args.use_latents_only or args.regenerate_latent_cache:
         if args.use_bucketing:
@@ -2381,9 +2385,9 @@ def main():
                     
 
                     # Get the target for loss depending on the prediction type
-                    if noise_scheduler.config.prediction_type == "epsilon":
+                    if noise_scheduler.config.prediction_type == "epsilon" and not args.force_v_pred:
                         target = noise
-                    elif noise_scheduler.config.prediction_type == "v_prediction":
+                    elif noise_scheduler.config.prediction_type == "v_prediction" or args.force_v_pred:
                         target = noise_scheduler.get_velocity(latents, noise, timesteps)
                     else:
                         raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
