@@ -1757,7 +1757,9 @@ def main():
     if args.zero_terminal_snr:
         noise_scheduler.betas = tu.enforce_zero_terminal_snr(noise_scheduler.betas)
 
-    if not args.use_latents_only or args.regenerate_latent_cache:
+    if args.use_latents_only and not args.regenerate_latent_cache:
+        print("Notice: Running from latent cache only!")
+    elif not args.use_latents_only or args.regenerate_latent_cache:
         if args.use_bucketing:
             train_dataset = AutoBucketing(
                 concepts_list=args.concepts_list,
@@ -1793,8 +1795,6 @@ def main():
             extra_module=None if args.model_variant != "depth2img" else d2i,
             mask_prompts=args.mask_prompts,
         )
-    else:
-        print("Notice: Running from latent cache only!")
 
     def collate_fn(examples):
         #print(examples)
