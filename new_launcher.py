@@ -217,10 +217,10 @@ def parse_settings(settings):
 	for setting in settings.keys():
 		if st_args[f"{setting}_type"] == "bool":
 			launcher_args.append(f"--{setting}")
-		elif st_args[f"{setting}_type"] == "float" or st_args[f"{setting}_type"] == "int":
-			launcher_args.append(f'--{setting}={st_settings[setting]}')
+		#elif st_args[f"{setting}_type"] == "float" or st_args[f"{setting}_type"] == "int":
+			#launcher_args.append(f'--{setting}={st_settings[setting]}')#
 		else:
-			launcher_args.append(f'--{setting}="{st_settings[setting]}"')
+			launcher_args.append(f'--{setting}="{st_settings[setting]}')
 		
 
 # constant_cosine is a special case
