@@ -129,6 +129,7 @@ register_arg("instance_data_dir", "", "str", "LEGACY: A folder containing the tr
 register_arg("instance_prompt", "", "str", "LEGACY: The prompt with identifier specifying the instance.")
 register_arg("class_data_dir", "", "str", "LEGACY: A folder containing the training data of class images.")
 register_arg("class_prompt", "", "str", "LEGACY: The prompt to specify images in the same class as provided instance images.")
+register_arg("add_mask_prompt", "", "str", "LEGACY: The prompt to specify images for inpainting - not properly supported.")
 register_arg("sample_batch_size", 4, "int", "LEGACY: Batch size (per connected HF Accelerate device) for sampling images.")
 register_arg("add_class_images_to_dataset", False, "bool", "LEGACY: This adds your regularisation images (class images) to your training dataset.")
 

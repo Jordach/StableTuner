@@ -139,6 +139,7 @@ def parse_args():
     parser.add_argument("--instance_prompt",               default=None, type=str, help="The prompt with identifier specifying the instance")
     parser.add_argument("--class_data_dir",                default=None, type=str, help="A folder containing the training data of class images.")
     parser.add_argument("--class_prompt",                  default=None, type=str, help="The prompt to specify images in the same class as provided instance images.")
+    parser.add_argument('--add_mask_prompt',               default=None, type=str, action="append", dest="mask_prompts")
     parser.add_argument("--sample_batch_size",             default=4, type=int, help="Batch size (per device) for sampling images.")
     parser.add_argument("--add_class_images_to_dataset",   default=False, action="store_true", help="will generate and add class images to the dataset without using prior reservation in training")
     
