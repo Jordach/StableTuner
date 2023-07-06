@@ -278,6 +278,7 @@ if are_we_constant_cosine:
 	for e in range(max_epochs):
 		# Handle the cosine decay
 		st_settings["learning_rate"] = cosine_curve(e, st_settings["num_train_epochs"])
+		print(st_settings["learning_rate"])
 		parse_settings(st_settings)
 		subprocess.run(launcher_args)
 		print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
@@ -294,7 +295,7 @@ if are_we_constant_cosine:
 		pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
 		pixeldrain_json = pixeldrain_response.json()
 		if pixeldrain_json["success"]:
-			data = {"content": f"# New Checkpoint! :tada:\n\n{st_settings['project_name']}_e1_{st_settings['project_append']}.safetensors:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
+			data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
 			webhook = requests.post(args.webhook, json=data)
 		else:
 			data = {"content": f"PixelDrain is down or something happened during upload. :(", "username": "Fluffusion Trainer"}
@@ -304,19 +305,30 @@ else:
 	parse_settings(st_settings)
 	subprocess.run(launcher_args)
 
-	# # Important file things for automated uploads
-	# input_diffusers = f'{st_settings["output_dir"]}/'
-	# output_filename = ""
-	# output_checkpoint = f'{st_settings["output_dir"]}'
+	max_epochs = 1
+	if "num_train_epochs" in st_settings:
+		max_epochs = copy.deepcopy(st_settings["num_train_epochs"])
 
-	# if args.webhook != "":
-	# 	file = open(output_checkpoint, "rb")
-	# 	pixeldrain_api = "https://pixeldrain.com/api/file"
-	# 	pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
-	# 	pixeldrain_json = pixeldrain_response.json()
-	# 	if pixeldrain_json["success"]:
-	# 		data = {"content": f"# New Checkpoint! :tada:\n\n{st_settings['project_name']}_e1_{st_settings['project_append']}.safetensors:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
-	# 		webhook = requests.post(args.webhook, json=data)
-	# 	else:
-	# 		data = {"content": f"PixelDrain is down or something happened during upload. :(", "username": "Fluffusion Trainer"}
-	# 		webhook = requests.post(args.webhook, json=data)
+	# Important file things for automated uploads
+	input_diffusers = f'{st_settings["output_dir"]}/epoch_{max_epochs}'
+	if "save_every_n_epoch" in st_settings:
+		if st_settings["save_every_n_epoch"] != 1:
+			input_diffusers = f'{st_settings["output_dir"]}/epoch_{max_epochs+1}'
+	output_filename = f'{st_settings["project_name"]}_e{max_epochs}_{st_settings["project_append"]}.safetensors'
+	output_checkpoint = f'{st_settings["output_dir"]}'
+
+	subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
+	# Move the diffusers folder to safety
+	shutil.move(input_diffusers, f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{max_epochs}_{st_settings["project_append"]}')
+
+	if args.webhook != "":
+		file = open(output_checkpoint, "rb")
+		pixeldrain_api = "https://pixeldrain.com/api/file"
+		pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
+		pixeldrain_json = pixeldrain_response.json()
+		if pixeldrain_json["success"]:
+			data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
+			webhook = requests.post(args.webhook, json=data)
+		else:
+			data = {"content": f"PixelDrain is down or something happened during upload. :(", "username": "Fluffusion Trainer"}
+			webhook = requests.post(args.webhook, json=data)

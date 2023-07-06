@@ -2169,6 +2169,7 @@ def main():
         raise e
     except KeyboardInterrupt:
         print("SIGINT/CTRL + C detected, stopping.")
+    # If it's being saved every epoch, we don't need to save another
     if args.save_every_n_epoch != 1:
         save_and_sample_weights(args.num_train_epochs,'epoch')
 
