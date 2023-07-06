@@ -269,7 +269,7 @@ if are_we_constant_cosine:
 		max_epochs = copy.deepcopy(st_settings["num_train_epochs"])
 
 	# Important file things for automated uploads
-	input_diffusers = f'{st_settings["output_dir"]}/epoch_0'
+	input_diffusers = f'{st_settings["output_dir"]}/epoch_1'
 	output_filename = ""
 	output_checkpoint = f'{st_settings["output_dir"]}'
 
