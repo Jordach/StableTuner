@@ -2104,7 +2104,7 @@ def main():
                             loss = tu.apply_snr_weight(loss, timesteps.to(accelerator.device), noise_scheduler, args.min_snr_gamma, accelerator)
                             loss = loss.mean()
                         elif args.scale_v_pred_loss:
-                            loss = tu.scale_v_prediction_loss_like_noise_prediction(loss, timesteps.to(accelerator.device), noise_scheduler)
+                            loss = tu.scale_v_prediction_loss_like_noise_prediction(loss, timesteps.to(accelerator.device), noise_scheduler, accelerator)
                         else:
                             loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 

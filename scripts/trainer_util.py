@@ -25,12 +25,12 @@ def exists(val):
 def default(val, d):
     return val if exists(val) else d
 
-def scale_v_prediction_loss_like_noise_prediction(loss, timesteps, noise_scheduler):
+def scale_v_prediction_loss_like_noise_prediction(loss, timesteps, noise_scheduler, accelerator):
     snr_t = torch.stack([noise_scheduler.all_snr[t] for t in timesteps])  # batch_size
     snr_t = torch.minimum(snr_t, torch.ones_like(snr_t) * 1000)  # if timestep is 0, snr_t is inf, so limit it to 1000
     scale = snr_t / (snr_t + 1)
 
-    loss = loss * scale
+    loss = loss * scale.to(accelerator.device)
     return loss
 
 def enforce_zero_terminal_snr(betas):
