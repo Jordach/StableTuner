@@ -281,6 +281,7 @@ if are_we_constant_cosine:
 		parse_settings(st_settings)
 		subprocess.run(launcher_args)
 		print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
+		time.sleep(5)
 		output_filename = f'{st_settings["project_name"]}_e{e}_{st_settings["project_append"]}.safetensors'
 		output_checkpoint = f'{st_settings["output_dir"]}/{output_filename}'
 		subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
