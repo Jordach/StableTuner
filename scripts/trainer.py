@@ -2104,12 +2104,12 @@ def main():
                             loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
                             loss = loss.mean([1, 2, 3])
                             loss = loss.to(accelerator.device)
-                        if args.min_snr_gamma:
-                            loss = tu.apply_snr_weight(loss, timesteps.to(accelerator.device), noise_scheduler, args.min_snr_gamma, accelerator)
-                            loss = loss.mean()
-                        if args.scale_v_pred_loss:
-                            loss = tu.scale_v_prediction_loss_like_noise_prediction(loss, timesteps.to(accelerator.device), noise_scheduler, accelerator)
-                            loss = loss.mean()
+                            if args.min_snr_gamma:
+                                loss = tu.apply_snr_weight(loss, timesteps.to(accelerator.device), noise_scheduler, args.min_snr_gamma, accelerator)
+                                loss = loss.mean()
+                            if args.scale_v_pred_loss:
+                                loss = tu.scale_v_prediction_loss_like_noise_prediction(loss, timesteps.to(accelerator.device), noise_scheduler, accelerator)
+                                loss = loss.mean()
                         else:
                             loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
