@@ -1454,6 +1454,9 @@ def main():
     if args.zero_terminal_snr:
         print(f" {bcolors.WARNING}Enforcing Zero Terminal SNR.{bcolors.ENDC}")
         noise_scheduler.betas = tu.enforce_zero_terminal_snr(noise_scheduler.betas)
+    if args.scale_v_pred_loss:
+        print(f" {bcolors.WARNING}Scaling V-Prediction Loss.{bcolors.ENDC}")
+        tu.prepare_scheduler_for_custom_training(noise_scheduler, accelerator.device)
 
     if args.use_latents_only:
         print(f" {bcolors.WARNING}Notice: Running from latent cache only!.{bcolors.ENDC}")
@@ -2108,6 +2111,7 @@ def main():
                             loss = loss.mean([1, 2, 3])
                             loss = loss.to(accelerator.device)
                             loss = tu.scale_v_prediction_loss_like_noise_prediction(loss, timesteps.to(accelerator.device), noise_scheduler, accelerator)
+                            loss = loss.mean()
                         else:
                             loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
