@@ -209,11 +209,11 @@ if "project_append" not in st_settings:
 	st_settings["project_append"] = st_args["project_append"]
 
 # Generate the launch command for StableTuner
-launcher_args = ["accelerate", "launch", '--mixed_precision="fp16"', "scripts/trainer.py"]
+launcher_args = ["accelerate", "launch", '--mixed_precision=fp16', "scripts/trainer.py"]
 
 def parse_settings(settings):
 	global launcher_args
-	launcher_args = ["accelerate", "launch", '--mixed_precision="fp16"', "scripts/trainer.py"]
+	launcher_args = ["accelerate", "launch", '--mixed_precision=fp16', "scripts/trainer.py"]
 	for setting in settings.keys():
 		if st_args[f"{setting}_type"] != "bool":
 			launcher_args.append(f'--{setting}="{st_settings[setting]}"')
