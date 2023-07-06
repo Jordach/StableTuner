@@ -283,11 +283,11 @@ if are_we_constant_cosine:
 			subprocess.run(launcher_args)
 			print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
 			time.sleep(5)
-			output_filename = f'{st_settings["project_name"]}_e{e}_{st_settings["project_append"]}.safetensors'
+			output_filename = f'{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}.safetensors'
 			output_checkpoint = f'{st_settings["output_dir"]}/{output_filename}'
 			subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
 			# Move the diffusers folder to safety
-			output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e}_{st_settings["project_append"]}'
+			output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}'
 			shutil.move(input_diffusers, output_path)
 		st_settings["pretrained_model_name_or_path"] = output_path
 		st_settings["use_latents_only"] = True
