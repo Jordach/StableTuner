@@ -2157,8 +2157,9 @@ def main():
             if args.seed is not None and args.epoch_seed:
                 set_seed(args.seed + (1 + epoch))
             accelerator.wait_for_everyone()
-    except Exception:
+    except Exception as e:
         print("Something went tits up.")
+        raise e
     except KeyboardInterrupt:
         print("SIGINT/CTRL + C detected, stopping.")
     save_and_sample_weights(args.num_train_epochs,'epoch')
