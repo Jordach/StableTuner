@@ -18,6 +18,7 @@ parser.add_argument("--config", help="Where the config is, if the file doesn't e
 parser.add_argument("--webhook", default="", help="The Discord webhook that you want to emit finished training runs to.")
 parser.add_argument("--show_unchanged_settings", action="store_true", help="Shows which config lines are redundant.")
 parser.add_argument("--hide_ignored_settings", action="store_true", help="Cleans up output for messy or broken configs.")
+parser.add_argument("--no_exec", action="store_true", help="Disables execution of subprocesses and file copy ops")
 
 args = parser.parse_args()
 
@@ -237,10 +238,9 @@ if "lr_scheduler" in st_settings:
 		are_we_constant_cosine = True
 		st_settings["lr_scheduler"] = "constant"
 		if "learning_rate" in st_settings:
-			start_lr = st_settings["learning_rate"] + 1
+			start_lr = copy.deepcopy(st_settings["learning_rate"])
 		else:
-			start_lr = st_args["learning_rate"] + 1
-		start_lr -= 1
+			start_lr = copy.deepcopy(st_args["learning_rate"])
 
 def cosine_curve(epoch, total_epochs):
 	global start_lr
@@ -272,22 +272,24 @@ if are_we_constant_cosine:
 	input_diffusers = f'{st_settings["output_dir"]}/epoch_1'
 	output_filename = ""
 	output_checkpoint = f'{st_settings["output_dir"]}'
-
+	output_path = ""
 	# We only want to train one epoch at a time
 	st_settings["num_train_epochs"] = 1
 	for e in range(max_epochs):
 		# Handle the cosine decay
-		st_settings["learning_rate"] = cosine_curve(e, st_settings["num_train_epochs"])
-		print(st_settings["learning_rate"])
+		st_settings["learning_rate"] = cosine_curve(e, max_epochs)
 		parse_settings(st_settings)
-		subprocess.run(launcher_args)
-		print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
-		time.sleep(5)
-		output_filename = f'{st_settings["project_name"]}_e{e}_{st_settings["project_append"]}.safetensors'
-		output_checkpoint = f'{st_settings["output_dir"]}/{output_filename}'
-		subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
-		# Move the diffusers folder to safety
-		shutil.move(input_diffusers, f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e}_{st_settings["project_append"]}')
+		if not args.no_exec:
+			subprocess.run(launcher_args)
+			print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
+			time.sleep(5)
+			output_filename = f'{st_settings["project_name"]}_e{e}_{st_settings["project_append"]}.safetensors'
+			output_checkpoint = f'{st_settings["output_dir"]}/{output_filename}'
+			subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
+			# Move the diffusers folder to safety
+			output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e}_{st_settings["project_append"]}'
+			shutil.move(input_diffusers, output_path)
+		st_settings["pretrained_model_name_or_path"] = output_path
 
 	if args.webhook != "":
 		file = open(output_checkpoint, "rb")
@@ -303,7 +305,9 @@ if are_we_constant_cosine:
 
 else:
 	parse_settings(st_settings)
-	subprocess.run(launcher_args)
+
+	if not args.no_exec:
+		subprocess.run(launcher_args)
 
 	max_epochs = 1
 	if "num_train_epochs" in st_settings:
@@ -317,18 +321,19 @@ else:
 	output_filename = f'{st_settings["project_name"]}_e{max_epochs}_{st_settings["project_append"]}.safetensors'
 	output_checkpoint = f'{st_settings["output_dir"]}'
 
-	subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
-	# Move the diffusers folder to safety
-	shutil.move(input_diffusers, f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{max_epochs}_{st_settings["project_append"]}')
+	if not args.no_exec:
+		subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
+		# Move the diffusers folder to safety
+		shutil.move(input_diffusers, f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{max_epochs}_{st_settings["project_append"]}')
 
-	if args.webhook != "":
-		file = open(output_checkpoint, "rb")
-		pixeldrain_api = "https://pixeldrain.com/api/file"
-		pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
-		pixeldrain_json = pixeldrain_response.json()
-		if pixeldrain_json["success"]:
-			data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
-			webhook = requests.post(args.webhook, json=data)
-		else:
-			data = {"content": f"PixelDrain is down or something happened during upload. :(", "username": "Fluffusion Trainer"}
-			webhook = requests.post(args.webhook, json=data)
+		if args.webhook != "":
+			file = open(output_checkpoint, "rb")
+			pixeldrain_api = "https://pixeldrain.com/api/file"
+			pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
+			pixeldrain_json = pixeldrain_response.json()
+			if pixeldrain_json["success"]:
+				data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
+				webhook = requests.post(args.webhook, json=data)
+			else:
+				data = {"content": f"PixelDrain is down or something happened during upload. :(", "username": "Fluffusion Trainer"}
+				webhook = requests.post(args.webhook, json=data)
