@@ -17,5 +17,5 @@ pyperclip==1.8.2
 gradio
 keyboard
 huggingface
-diffusers
+diffusers==0.11.1
 ninja

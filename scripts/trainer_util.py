@@ -25,24 +25,32 @@ def exists(val):
 def default(val, d):
     return val if exists(val) else d
 
-def enforce_zero_terminal_snr(betas):
-	# Convert betas to alphas_bar_sqrt
-	alphas = 1 - betas
-	alphas_bar = alphas.cumprod(0)
-	alphas_bar_sqrt = alphas_bar.sqrt()
-	# Store old values.
-	alphas_bar_sqrt_0 = alphas_bar_sqrt[0].clone()
-	alphas_bar_sqrt_T = alphas_bar_sqrt[-1].clone()
-	# Shift so last timestep is zero.
-	alphas_bar_sqrt -= alphas_bar_sqrt_T
-	# Scale so first timestep is back to old value.
-	alphas_bar_sqrt *= alphas_bar_sqrt_0 / (alphas_bar_sqrt_0 - alphas_bar_sqrt_T)
+def scale_v_prediction_loss_like_noise_prediction(loss, timesteps, noise_scheduler):
+    snr_t = torch.stack([noise_scheduler.all_snr[t] for t in timesteps])  # batch_size
+    snr_t = torch.minimum(snr_t, torch.ones_like(snr_t) * 1000)  # if timestep is 0, snr_t is inf, so limit it to 1000
+    scale = snr_t / (snr_t + 1)
 
-	# Convert alphas_bar_sqrt to betas
-	alphas_bar = alphas_bar_sqrt ** 2
-	alphas = alphas_bar[1:] / alphas_bar[:-1]
-	alphas = torch.cat([alphas_bar[0:1], alphas])
-	return 1 - alphas
+    loss = loss * scale
+    return loss
+
+def enforce_zero_terminal_snr(betas):
+    # Convert betas to alphas_bar_sqrt
+    alphas = 1 - betas
+    alphas_bar = alphas.cumprod(0)
+    alphas_bar_sqrt = alphas_bar.sqrt()
+    # Store old values.
+    alphas_bar_sqrt_0 = alphas_bar_sqrt[0].clone()
+    alphas_bar_sqrt_T = alphas_bar_sqrt[-1].clone()
+    # Shift so last timestep is zero.
+    alphas_bar_sqrt -= alphas_bar_sqrt_T
+    # Scale so first timestep is back to old value.
+    alphas_bar_sqrt *= alphas_bar_sqrt_0 / (alphas_bar_sqrt_0 - alphas_bar_sqrt_T)
+
+    # Convert alphas_bar_sqrt to betas
+    alphas_bar = alphas_bar_sqrt ** 2
+    alphas = alphas_bar[1:] / alphas_bar[:-1]
+    alphas = torch.cat([alphas_bar[0:1], alphas])
+    return 1 - alphas
 
 def apply_snr_weight(loss, timesteps, noise_scheduler, gamma, adev): 
     alphas_cumprod = noise_scheduler.alphas_cumprod

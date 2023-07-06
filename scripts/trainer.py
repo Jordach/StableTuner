@@ -13,7 +13,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import keyboard
 import gradio as gr
 import argparse
 import random
@@ -62,333 +61,87 @@ class bcolors:
 logger = get_logger(__name__)
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
-    parser.add_argument(
-        "--shuffle_per_epoch",
-        default=False,
-        action="store_true",
-        help="Will shffule the dataset per epoch",
-    )
-    parser.add_argument(
-        "--attention",
-        type=str,
-        choices=["xformers", "flash_attention"],
-        default="xformers",
-        help="Type of attention to use."
-    )
-    parser.add_argument(
-        "--model_variant",
-        type=str,
-        default='base',
-        required=False,
-        help="Train Base/Inpaint/Depth2Img",
-    )
-    parser.add_argument(
-        "--aspect_mode",
-        type=str,
-        default='dynamic',
-        required=False,
-        help="Path to pretrained model or model identifier from huggingface.co/models.",
-    )
-    parser.add_argument(
-        "--aspect_mode_action_preference",
-        type=str,
-        default='add',
-        required=False,
-        help="Path to pretrained model or model identifier from huggingface.co/models.",
-    )
-    parser.add_argument('--use_ema',default=False,action="store_true", help='Use EMA for finetuning')
-    parser.add_argument('--clip_penultimate',default=False,action="store_true", help='Use penultimate CLIP layer for text embedding')
-    parser.add_argument("--conditional_dropout", type=float, default=None,required=False, help="Conditional dropout probability")
-    parser.add_argument('--disable_cudnn_benchmark', default=False, action="store_true")
-    parser.add_argument('--use_text_files_as_captions', default=False, action="store_true")
-    
-    parser.add_argument(
-            "--sample_from_batch",
-            type=int,
-            default=0,
-            help=("Number of prompts to sample from the batch for inference"),
-        )
-    parser.add_argument(
-            "--stop_text_encoder_training",
-            type=int,
-            default=999999999999999,
-            help=("The epoch at which the text_encoder is no longer trained"),
-        )
-    parser.add_argument(
-        "--use_bucketing",
-        default=False,
-        action="store_true",
-        help="Will save and generate samples before training",
-    )
-    parser.add_argument(
-        "--regenerate_latent_cache",
-        default=False,
-        action="store_true",
-        help="Will save and generate samples before training",
-    )
-    parser.add_argument(
-        "--sample_on_training_start",
-        default=False,
-        action="store_true",
-        help="Will save and generate samples before training",
-    )
 
-    parser.add_argument(
-        "--add_class_images_to_dataset",
-        default=False,
-        action="store_true",
-        help="will generate and add class images to the dataset without using prior reservation in training",
-    )
-    parser.add_argument(
-        "--auto_balance_concept_datasets",
-        default=False,
-        action="store_true",
-        help="will balance the number of images in each concept dataset to match the minimum number of images in any concept dataset",
-    )
-    parser.add_argument(
-        "--sample_aspect_ratios",
-        default=False,
-        action="store_true",
-        help="sample different aspect ratios for each image",
-    )
-    parser.add_argument(
-        "--dataset_repeats",
-        type=int,
-        default=1,
-        help="repeat the dataset this many times",
-    )
-    parser.add_argument(
-        "--save_every_n_epoch",
-        type=int,
-        default=1,
-        help="save on epoch finished",
-    )
-    parser.add_argument(
-        "--pretrained_model_name_or_path",
-        type=str,
-        default=None,
-        required=True,
-        help="Path to pretrained model or model identifier from huggingface.co/models.",
-    )
-    parser.add_argument(
-        "--pretrained_vae_name_or_path",
-        type=str,
-        default=None,
-        help="Path to pretrained vae or vae identifier from huggingface.co/models.",
-    )
-    parser.add_argument(
-        "--tokenizer_name",
-        type=str,
-        default=None,
-        help="Pretrained tokenizer name or path if not the same as model_name",
-    )
-    parser.add_argument(
-        "--instance_data_dir",
-        type=str,
-        default=None,
-        help="A folder containing the training data of instance images.",
-    )
-    parser.add_argument(
-        "--class_data_dir",
-        type=str,
-        default=None,
-        help="A folder containing the training data of class images.",
-    )
-    parser.add_argument(
-        "--instance_prompt",
-        type=str,
-        default=None,
-        help="The prompt with identifier specifying the instance",
-    )
-    parser.add_argument(
-        "--class_prompt",
-        type=str,
-        default=None,
-        help="The prompt to specify images in the same class as provided instance images.",
-    )
-    parser.add_argument(
-        "--save_sample_prompt",
-        type=str,
-        default=None,
-        help="The prompt used to generate sample outputs to save.",
-    )
-    parser.add_argument(
-        "--n_save_sample",
-        type=int,
-        default=4,
-        help="The number of samples to save.",
-    )
-    parser.add_argument(
-        "--sample_height",
-        type=int,
-        default=512,
-        help="The number of samples to save.",
-    )
-    parser.add_argument(
-        "--sample_width",
-        type=int,
-        default=512,
-        help="The number of samples to save.",
-    )
-    parser.add_argument(
-        "--save_guidance_scale",
-        type=float,
-        default=7.5,
-        help="CFG for save sample.",
-    )
-    parser.add_argument(
-        "--save_infer_steps",
-        type=int,
-        default=30,
-        help="The number of inference steps for save sample.",
-    )
-    parser.add_argument(
-        "--with_prior_preservation",
-        default=False,
-        action="store_true",
-        help="Flag to add prior preservation loss.",
-    )
-    parser.add_argument("--prior_loss_weight", type=float, default=1.0, help="The weight of prior preservation loss.")
-    parser.add_argument(
-        "--num_class_images",
-        type=int,
-        default=100,
-        help=(
-            "Minimal class images for prior preservation loss. If not have enough images, additional images will be"
-            " sampled with class_prompt."
-        ),
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        default="text-inversion-model",
-        help="The output directory where the model predictions and checkpoints will be written.",
-    )
-    parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
-    parser.add_argument(
-        "--resolution",
-        type=int,
-        default=512,
-        help=(
-            "The resolution for input images, all the images in the train/validation dataset will be resized to this"
-            " resolution"
-        ),
-    )
-    parser.add_argument(
-        "--center_crop", action="store_true", help="Whether to center crop images before resizing to resolution"
-    )
-    parser.add_argument("--train_text_encoder", action="store_true", help="Whether to train the text encoder")
-    parser.add_argument(
-        "--train_batch_size", type=int, default=4, help="Batch size (per device) for the training dataloader."
-    )
-    parser.add_argument(
-        "--sample_batch_size", type=int, default=4, help="Batch size (per device) for sampling images."
-    )
-    parser.add_argument("--num_train_epochs", type=int, default=1)
-    parser.add_argument(
-        "--max_train_steps",
-        type=int,
-        default=None,
-        help="Total number of training steps to perform.  If provided, overrides num_train_epochs.",
-    )
-    parser.add_argument(
-        "--gradient_accumulation_steps",
-        type=int,
-        default=1,
-        help="Number of updates steps to accumulate before performing a backward/update pass.",
-    )
-    parser.add_argument(
-        "--gradient_checkpointing",
-        action="store_true",
-        help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.",
-    )
-    parser.add_argument(
-        "--learning_rate",
-        type=float,
-        default=5e-6,
-        help="Initial learning rate (after the potential warmup period) to use.",
-    )
-    parser.add_argument(
-        "--scale_lr",
-        action="store_true",
-        default=False,
-        help="Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.",
-    )
-    parser.add_argument(
-        "--lr_scheduler",
-        type=str,
-        default="constant",
-        help=(
-            'The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial",'
-            ' "constant", "constant_with_warmup"]'
-        ),
-    )
-    parser.add_argument(
-        "--lr_warmup_steps", type=float, default=500, help="Number of steps for the warmup in the lr scheduler."
-    )
-    parser.add_argument(
-        "--use_8bit_adam", action="store_true", help="Whether or not to use 8-bit Adam from bitsandbytes."
-    )
-    parser.add_argument("--adam_beta1", type=float, default=0.9, help="The beta1 parameter for the Adam optimizer.")
-    parser.add_argument("--adam_beta2", type=float, default=0.999, help="The beta2 parameter for the Adam optimizer.")
-    parser.add_argument("--adam_weight_decay", type=float, default=1e-2, help="Weight decay to use.")
-    parser.add_argument("--adam_epsilon", type=float, default=1e-08, help="Epsilon value for the Adam optimizer")
-    parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
-    parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
-    parser.add_argument("--hub_token", type=str, default=None, help="The token to use to push to the Model Hub.")
-    parser.add_argument(
-        "--hub_model_id",
-        type=str,
-        default=None,
-        help="The name of the repository to keep in sync with the local `output_dir`.",
-    )
-    parser.add_argument(
-        "--logging_dir",
-        type=str,
-        default="logs",
-        help=(
-            "[TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to"
-            " *output_dir/runs/**CURRENT_DATETIME_HOSTNAME***."
-        ),
-    )
-    parser.add_argument("--log_interval", type=int, default=10, help="Log every N steps.")
-    parser.add_argument("--sample_step_interval", type=int, default=100000000000000, help="Sample images every N steps.")
-    parser.add_argument(
-        "--mixed_precision",
-        type=str,
-        default="no",
-        choices=["no", "fp16", "bf16","tf32"],
-        help=(
-            "Whether to use mixed precision. Choose"
-            "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."
-            "and an Nvidia Ampere GPU."
-        ),
-    )
-    parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
-    parser.add_argument(
-        "--concepts_list",
-        type=str,
-        default=None,
-        help="Path to json containing multiple concepts, will overwrite parameters like instance_prompt, class_prompt, etc.",
-    )
-    parser.add_argument("--save_sample_controlled_seed", type=int, action='append', help="Set a seed for an extra sample image to be constantly saved.")
-    parser.add_argument("--detect_full_drive", default=True, action="store_true", help="Delete checkpoints when the drive is full.")
-    parser.add_argument("--send_telegram_updates", default=False, action="store_true", help="Send Telegram updates.")
-    parser.add_argument("--telegram_chat_id", type=str, default="0", help="Telegram chat ID.")
-    parser.add_argument("--telegram_token", type=str, default="0", help="Telegram token.")
-    parser.add_argument("--use_deepspeed_adam", default=False, action="store_true", help="Use experimental DeepSpeed Adam 8.")
-    parser.add_argument('--append_sample_controlled_seed_action', action='append')
-    parser.add_argument('--add_sample_prompt', type=str, action='append')
-    parser.add_argument('--use_image_names_as_captions', default=False, action="store_true")
-    parser.add_argument('--add_mask_prompt', type=str, default=None, action="append", dest="mask_prompts")
-    parser.add_argument('--token_limit', type=int, default=75, help="Token limit, token lengths longer than the next multiple of 75 will be truncated.")
-    parser.add_argument('--use_latents_only', default=False, action="store_true")
-    parser.add_argument('--epoch_seed', default=False, action="store_true")
-    parser.add_argument("--min_snr_gamma", type=float, default=None, help="gamma for reducing the weight of high loss timesteps. Lower numbers have stronger effect. 5 is recommended by paper.")
-    parser.add_argument('--with_pertubation_noise', default=False, action="store_true")
-    parser.add_argument("--perturbation_noise_weight", type=float, default=0.1, help="The weight of perturbation noise applied during training.")
-    parser.add_argument("--zero_terminal_snr", default=False, action="store_true", help="Enables Zero Terminal SNR, see https://arxiv.org/pdf/2305.08891.pdf - requires --force_v_pred for non SD2.1 models")
-    parser.add_argument("--force_v_pred", default=False, action="store_true", help="Force enables V Prediction for models that don't officially support it - ie SD1.5")
+    # Training Settings
+    parser.add_argument("--resolution",                    default=512, type=int, help="The resolution for input images, all the images in the train/validation dataset will be resized to this resolution")
+    parser.add_argument("--train_batch_size",              default=4, type=int, help="Batch size (per device) for the training dataloader.")
+    parser.add_argument("--num_train_epochs",              default=1, type=int)
+    parser.add_argument("--shuffle_per_epoch",             default=False, action="store_true", help="Will shffule the dataset per epoch")
+    parser.add_argument("--use_bucketing",                 default=False, action="store_true")
+    parser.add_argument("--seed",                          default=42, type=int, help="A seed for reproducible training.")
+    parser.add_argument("--learning_rate",                 default=5e-6, type=float, help="Initial learning rate (after the potential warmup period) to use.")
+    parser.add_argument("--lr_scheduler",                  default="constant", type=str, help='The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"]')
+    parser.add_argument("--lr_warmup_steps",               default=500, type=float, help="Number of steps for the warmup in the lr scheduler.")
+    parser.add_argument('--token_limit',                   default=75, type=int, help="Token limit, token lengths longer than the next multiple of 75 will be truncated.")
+    parser.add_argument('--epoch_seed',                    default=False, action="store_true")
+    parser.add_argument("--min_snr_gamma",                 default=None, type=float, help="gamma for reducing the weight of high loss timesteps. Lower numbers have stronger effect. 5 is recommended by paper.")
+    parser.add_argument('--with_pertubation_noise',        default=False, action="store_true")
+    parser.add_argument("--perturbation_noise_weight",     default=0.1, type=float, help="The weight of perturbation noise applied during training.")
+    parser.add_argument("--zero_terminal_snr",             default=False, action="store_true", help="Enables Zero Terminal SNR, see https://arxiv.org/pdf/2305.08891.pdf - requires --force_v_pred for non SD2.1 models")
+    parser.add_argument("--force_v_pred",                  default=False, action="store_true", help="Force enables V Prediction for models that don't officially support it - ie SD1.5")
+    parser.add_argument("--scale_v_pred_loss",             default=False, action="store_true", help="By scaling the loss according to the time step, the weights of global noise prediction and local noise prediction become the same, and the improvement of details may be expected.")
+    parser.add_argument("--conditional_dropout",           default=None, type=float, help="Conditional dropout probability")
+
+    # Model Settings
+    parser.add_argument("--model_variant",                 default='base', type=str, help="Train Base/Inpaint/Depth2Img")
+    parser.add_argument("--train_text_encoder",            default=False, action="store_true", help="Whether to train the text encoder")
+    parser.add_argument("--stop_text_encoder_training",    default=999999999999999, type=int, help=("The epoch at which the text_encoder is no longer trained"))
+    parser.add_argument('--clip_penultimate',              default=False, action="store_true", help='Use penultimate CLIP layer for text embedding')
+    parser.add_argument("--pretrained_model_name_or_path", default=None, type=str, required=True, help="Path to pretrained model or model identifier from huggingface.co/models.")
+    parser.add_argument("--pretrained_vae_name_or_path",   default=None, type=str, help="Path to pretrained vae or vae identifier from huggingface.co/models.")
+    parser.add_argument("--tokenizer_name",                default=None, type=str, help="Pretrained tokenizer name or path if not the same as model_name")
+    parser.add_argument('--use_ema',                       default=False,action="store_true", help='Use EMA for finetuning')
+
+    # Dataset Settings
+    parser.add_argument("--concepts_list",                 default=None, type=str, help="Path to json containing multiple concepts, will overwrite parameters like instance_prompt, class_prompt, etc.")
+    parser.add_argument("--aspect_mode",                   default='dynamic', type=str, help="Sets how aspect buckets should have their dataset resized by.")
+    parser.add_argument("--aspect_mode_action_preference", default='add', type=str, required=False, help="Override the preference from --aspect_mode.")
+    parser.add_argument("--dataset_repeats",               default=1, type=int, help="repeat the dataset this many times")
+    parser.add_argument('--use_text_files_as_captions',    default=False, action="store_true")
+    parser.add_argument('--use_image_names_as_captions',   default=False, action="store_true")
+    parser.add_argument("--auto_balance_concept_datasets", default=False, action="store_true", help="will balance the number of images in each concept dataset to match the minimum number of images in any concept dataset")
+    
+    # Optimisations
+    parser.add_argument("--mixed_precision",               default="no", type=str, choices=["no", "fp16", "bf16","tf32"], help="Whether to use mixed precision. Choose between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10. and an Nvidia Ampere GPU.")
+    parser.add_argument("--attention",                     default="xformers", type=str, choices=["xformers", "flash_attention"], help="Type of attention to use.")
+    parser.add_argument('--disable_cudnn_benchmark',       default=True, action="store_true")
+    parser.add_argument("--gradient_accumulation_steps",   default=1, type=int, help="Number of updates steps to accumulate before performing a backward/update pass.")
+    parser.add_argument("--gradient_checkpointing",        default=False, action="store_true", help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.")
+    parser.add_argument("--scale_lr",                      default=False, action="store_true", help="Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.")
+    parser.add_argument("--use_8bit_adam",                 default=False, action="store_true", help="Whether or not to use 8-bit Adam from bitsandbytes.")
+    parser.add_argument("--adam_beta1",                    default=0.9, type=float, help="The beta1 parameter for the Adam optimizer.")
+    parser.add_argument("--adam_beta2",                    default=0.999, type=float, help="The beta2 parameter for the Adam optimizer.")
+    parser.add_argument("--adam_weight_decay",             default=1e-2, type=float, help="Weight decay to use.")
+    parser.add_argument("--adam_epsilon",                  default=1e-08, type=float, help="Epsilon value for the Adam optimizer")
+    parser.add_argument("--max_grad_norm",                 default=1.0, type=float, help="Max gradient norm.")
+    parser.add_argument("--use_deepspeed_adam",            default=False, action="store_true", help="Use experimental DeepSpeed Adam 8.")
+
+    # Misc Settings
+    parser.add_argument("--save_every_n_epoch",            default=1, type=int, help="save on epoch finished")
+    parser.add_argument("--output_dir",                    default=None, type=str, required=True, help="The output directory where the model predictions and checkpoints will be written.")
+    parser.add_argument("--max_train_steps",               default=None, type=int, help="Total number of training steps to perform. If provided, overrides num_train_epochs.")
+    parser.add_argument("--regenerate_latent_cache",       default=False, action="store_true")
+    parser.add_argument('--use_latents_only',              default=False, action="store_true")
+    parser.add_argument("--logging_dir",                   default="logs", type=str, help="[TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to *output_dir/runs/**CURRENT_DATETIME_HOSTNAME***.")
+    parser.add_argument("--log_interval",                  default=10, type=int, help="Log every N steps.")
+    parser.add_argument("--overwite_csv_logs",             default=False, action="store_true", help="Overwrites a CSV containing loss, LR, current step, current epoch and a timestamp when starting a new training session.")
+    parser.add_argument("--local_rank",                    default=-1, type=int, help="For distributed training: local_rank")
+    parser.add_argument("--detect_full_drive",             default=True, action="store_true", help="Delete checkpoints when the drive is full.")
+
+    # Dreambooth Settings
+    parser.add_argument("--with_prior_preservation",       default=False, action="store_true", help="Flag to add prior preservation loss.")
+    parser.add_argument("--prior_loss_weight",             default=1.0, type=float, help="The weight of prior preservation loss.")
+    parser.add_argument("--num_class_images",              default=100, type=int, help="Minimal class images for prior preservation loss. If not have enough images, additional images will be sampled with class_prompt.")
+
+    # Legacy Settings
+    parser.add_argument("--center_crop",                   default=False, action="store_true", help="Whether to center crop images before resizing to resolution")
+    parser.add_argument("--instance_data_dir",             default=None, type=str, help="A folder containing the training data of instance images.")
+    parser.add_argument("--instance_prompt",               default=None, type=str, help="The prompt with identifier specifying the instance")
+    parser.add_argument("--class_data_dir",                default=None, type=str, help="A folder containing the training data of class images.")
+    parser.add_argument("--class_prompt",                  default=None, type=str, help="The prompt to specify images in the same class as provided instance images.")
+    parser.add_argument("--sample_batch_size",             default=4, type=int, help="Batch size (per device) for sampling images.")
+    parser.add_argument("--add_class_images_to_dataset",   default=False, action="store_true", help="will generate and add class images to the dataset without using prior reservation in training")
+    
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
@@ -1512,73 +1265,16 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
     else:
         return f"{organization}/{model_id}"
 
-#function to format a dictionary into a telegram message
-def format_dict(d):
-    message = ""
-    for key, value in d.items():
-        #filter keys that have the word "token" in them
-        if "token" in key and "tokenizer" not in key:
-            value = "TOKEN"
-        if 'id' in key:
-            value = "ID"
-        #if value is a dictionary, format it recursively
-        if isinstance(value, dict):
-            for k, v in value.items():
-                message += f"\n- {k}:  <b>{v}</b> \n"
-        elif isinstance(value, list):
-            #each value is a new line in the message
-            message += f"- {key}:\n\n"
-            for v in value:
-                    message += f"  <b>{v}</b>\n\n"
-        #if value is a list, format it as a list
-        else:
-            message += f"- {key}:  <b>{value}</b>\n"
-    return message
-
-def send_telegram_message(message, chat_id, token):
-    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={message}&parse_mode=html&disable_notification=True"
-    import requests
-    req = requests.get(url)
-    if req.status_code != 200:
-        raise ValueError(f"Telegram request failed with status code {req.status_code}")
-def send_media_group(chat_id,telegram_token, images, caption=None, reply_to_message_id=None):
-        """
-        Use this method to send an album of photos. On success, an array of Messages that were sent is returned.
-        :param chat_id: chat id
-        :param images: list of PIL images to send
-        :param caption: caption of image
-        :param reply_to_message_id: If the message is a reply, ID of the original message
-        :return: response with the sent message
-        """
-        SEND_MEDIA_GROUP = f'https://api.telegram.org/bot{telegram_token}/sendMediaGroup'
-        from io import BytesIO
-        import requests
-        files = {}
-        media = []
-        for i, img in enumerate(images):
-            with BytesIO() as output:
-                img.save(output, format='PNG')
-                output.seek(0)
-                name = f'photo{i}'
-                files[name] = output.read()
-                # a list of InputMediaPhoto. attach refers to the name of the file in the files dict
-                media.append(dict(type='photo', media=f'attach://{name}'))
-        media[0]['caption'] = caption
-        media[0]['parse_mode'] = 'HTML'
-        return requests.post(SEND_MEDIA_GROUP, data={'chat_id': chat_id, 'media': json.dumps(media),'disable_notification':True, 'reply_to_message_id': reply_to_message_id }, files=files)
 def main():
     print(f" {bcolors.OKBLUE}Booting Up StableTuner{bcolors.ENDC}") 
     print(f" {bcolors.OKBLUE}Please wait a moment as we load up some stuff...{bcolors.ENDC}") 
     #torch.cuda.set_per_process_memory_fraction(0.5)
     args = parse_args()
-    #temp arg
-    args.batch_tokens = None
     if args.disable_cudnn_benchmark:
         torch.backends.cudnn.benchmark = False
     else:
         torch.backends.cudnn.benchmark = True
-    if args.send_telegram_updates:
-        send_telegram_message(f"Booting up StableTuner!\n", args.telegram_chat_id, args.telegram_token)
+    
     logging_dir = Path(args.output_dir, "logs", args.logging_dir)
     main_sample_dir = os.path.join(args.output_dir, "samples")
     if os.path.exists(main_sample_dir):
@@ -2157,7 +1853,7 @@ def main():
                     requires_safety_checker=False
                 )
                 pipeline.scheduler = schedule
-                save_dir = os.path.join(args.output_dir, f"{context}_{step}")
+                save_dir = os.path.join(args.output_dir, f"{context}_{step+1}")
                 if args.stop_text_encoder_training == True:
                     save_dir = frozen_directory
                 if save_model:
@@ -2196,11 +1892,6 @@ def main():
     global_step = 0
     loss_avg = AverageMeter()
     text_enc_context = nullcontext() if args.train_text_encoder else torch.no_grad()
-    if args.send_telegram_updates:
-        try:
-            send_telegram_message(f"Starting training with the following settings:\n\n{format_dict(args.__dict__)}", args.telegram_chat_id, args.telegram_token)
-        except:
-            pass
     try:
         print(f" {bcolors.OKBLUE}Starting Training!{bcolors.ENDC}")
 
@@ -2227,10 +1918,6 @@ def main():
             if args.train_text_encoder:
                 text_encoder.train()
             
-            #save initial weights
-            if args.sample_on_training_start==True and epoch==0:
-                save_and_sample_weights(epoch,'start',save_model=False)
-            
             if args.train_text_encoder and args.stop_text_encoder_training == epoch:
                 args.stop_text_encoder_training = True
                 if accelerator.is_main_process:
@@ -2238,10 +1925,7 @@ def main():
                     current_percentage = (epoch/args.num_train_epochs)*100
                     #round to the nearest whole number
                     current_percentage = round(current_percentage,0)
-                    try:
-                        send_telegram_message(f"Text encoder training stopped at epoch {epoch} which is {current_percentage}% of training. Freezing weights and saving.", args.telegram_chat_id, args.telegram_token)   
-                    except:
-                        pass        
+
                     if os.path.exists(frozen_directory):
                         #delete the folder if it already exists
                         shutil.rmtree(frozen_directory)
@@ -2263,8 +1947,6 @@ def main():
                             conditioning_latents = conditioning_latent_dist.sample() * 0.18215
                         if args.model_variant == 'depth2img':
                             depth = batch[0][3]
-                    if args.sample_from_batch > 0:
-                        args.batch_tokens = batch[0][4]
                     # Sample noise that we'll add to the latents
                     noise = torch.randn_like(latents)
                     bsz = latents.shape[0]
@@ -2448,9 +2130,6 @@ def main():
                     progress_bar.set_postfix(**logs)
                     accelerator.log(logs, step=global_step)
 
-                if global_step > 0 and not global_step % args.sample_step_interval and epoch != 0:
-                    save_and_sample_weights(global_step,'step',save_model=False)
-
                 progress_bar.update(1)
                 progress_bar_inter_epoch.update(1)
                 progress_bar_e.refresh()
@@ -2476,24 +2155,12 @@ def main():
                 set_seed(args.seed + (1 + epoch))
             accelerator.wait_for_everyone()
     except Exception:
-        try:
-            send_telegram_message("Something went wrong while training! :(", args.telegram_chat_id, args.telegram_token)
-            #save_and_sample_weights(global_step,'checkpoint')
-            send_telegram_message(f"Saved checkpoint {global_step} on exit", args.telegram_chat_id, args.telegram_token)
-        except Exception:
-            pass
-        raise
+        print("Something went tits up.")
     except KeyboardInterrupt:
-        send_telegram_message("Training stopped", args.telegram_chat_id, args.telegram_token)
+        print("SIGINT/CTRL + C detected, stopping.")
     save_and_sample_weights(args.num_train_epochs,'epoch')
-    try:
-        send_telegram_message("Training finished!", args.telegram_chat_id, args.telegram_token)
-    except:
-        pass
 
     accelerator.end_training()
-    
-
 
 if __name__ == "__main__":
     main()
