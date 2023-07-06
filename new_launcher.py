@@ -220,7 +220,7 @@ def parse_settings(settings):
 		#elif st_args[f"{setting}_type"] == "float" or st_args[f"{setting}_type"] == "int":
 			#launcher_args.append(f'--{setting}={st_settings[setting]}')#
 		else:
-			launcher_args.append(f'--{setting}="{st_settings[setting]}')
+			launcher_args.append(f'--{setting}={st_settings[setting]}')
 		
 
 # constant_cosine is a special case
