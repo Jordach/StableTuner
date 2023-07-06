@@ -217,7 +217,7 @@ def parse_settings(settings):
 	launcher_args = ["accelerate", "launch", '--mixed_precision=fp16', "scripts/trainer.py"]
 	for setting in settings.keys():
 		# Skip args that shouldn't be used to launch ST, namely project settings
-		if setting in launcher_args:
+		if setting in skip_these_settings:
 			continue
 
 		if st_args[f"{setting}_type"] == "bool":
