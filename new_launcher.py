@@ -290,6 +290,7 @@ if are_we_constant_cosine:
 			output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e}_{st_settings["project_append"]}'
 			shutil.move(input_diffusers, output_path)
 		st_settings["pretrained_model_name_or_path"] = output_path
+		st_settings["use_latents_only"] = True
 
 	if args.webhook != "":
 		file = open(output_checkpoint, "rb")
