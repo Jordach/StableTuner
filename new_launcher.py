@@ -281,14 +281,14 @@ if are_we_constant_cosine:
 		parse_settings(st_settings)
 		if not args.no_exec:
 			subprocess.run(launcher_args)
-			print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
-			time.sleep(5)
-			output_filename = f'{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}.safetensors'
-			output_checkpoint = f'{st_settings["output_dir"]}/{output_filename}'
-			subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
-			# Move the diffusers folder to safety
-			output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}'
-			shutil.move(input_diffusers, output_path)
+		print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
+		time.sleep(5)
+		output_filename = f'{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}.safetensors'
+		output_checkpoint = f'{st_settings["output_dir"]}/{output_filename}'
+		subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
+		# Move the diffusers folder to safety
+		output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}'
+		shutil.move(input_diffusers, output_path)
 		st_settings["pretrained_model_name_or_path"] = output_path
 		st_settings["use_latents_only"] = True
 
@@ -320,21 +320,21 @@ else:
 		if st_settings["save_every_n_epoch"] != 1:
 			input_diffusers = f'{st_settings["output_dir"]}/epoch_{max_epochs+1}'
 	output_filename = f'{st_settings["project_name"]}_e{max_epochs}_{st_settings["project_append"]}.safetensors'
-	output_checkpoint = f'{st_settings["output_dir"]}'
+	output_checkpoint = f'{}'
 
-	if not args.no_exec:
-		subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
-		# Move the diffusers folder to safety
-		shutil.move(input_diffusers, f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{max_epochs}_{st_settings["project_append"]}')
+	# if args.no_exec:
+	subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
+	# Move the diffusers folder to safety
+	shutil.move(input_diffusers, f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{max_epochs}_{st_settings["project_append"]}')
 
-		if args.webhook != "":
-			file = open(output_checkpoint, "rb")
-			pixeldrain_api = "https://pixeldrain.com/api/file"
-			pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
-			pixeldrain_json = pixeldrain_response.json()
-			if pixeldrain_json["success"]:
-				data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
-				webhook = requests.post(args.webhook, json=data)
-			else:
-				data = {"content": f"PixelDrain is down or something happened during upload. :(", "username": "Fluffusion Trainer"}
-				webhook = requests.post(args.webhook, json=data)
+	if args.webhook != "":
+		file = open(f"{output_checkpoint}/{output_checkpoint}", "rb")
+		pixeldrain_api = "https://pixeldrain.com/api/file"
+		pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
+		pixeldrain_json = pixeldrain_response.json()
+		if pixeldrain_json["success"]:
+			data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
+			webhook = requests.post(args.webhook, json=data)
+		else:
+			data = {"content": f"PixelDrain is down or something happened during upload. :(", "username": "Fluffusion Trainer"}
+			webhook = requests.post(args.webhook, json=data)
