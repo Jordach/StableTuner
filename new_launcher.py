@@ -320,15 +320,14 @@ else:
 		if st_settings["save_every_n_epoch"] != 1:
 			input_diffusers = f'{st_settings["output_dir"]}/epoch_{max_epochs+1}'
 	output_filename = f'{st_settings["project_name"]}_e{max_epochs}_{st_settings["project_append"]}.safetensors'
-	output_checkpoint = f'{}'
-
+	dest_file = f'{st_settings["output_dir"]}/{output_filename}'
 	# if args.no_exec:
-	subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
+	subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, dest_file])
 	# Move the diffusers folder to safety
-	shutil.move(input_diffusers, f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{max_epochs}_{st_settings["project_append"]}')
+	# shutil.move(input_diffusers, f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{max_epochs}_{st_settings["project_append"]}')
 
 	if args.webhook != "":
-		file = open(f"{output_checkpoint}/{output_checkpoint}", "rb")
+		file = open(dest_file, "rb")
 		pixeldrain_api = "https://pixeldrain.com/api/file"
 		pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
 		pixeldrain_json = pixeldrain_response.json()
