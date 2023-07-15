@@ -269,6 +269,9 @@ if are_we_constant_cosine:
 	else:
 		max_epochs = copy.deepcopy(st_settings["num_train_epochs"])
 
+	if "seed" not in st_settings:
+		st_settings["seed"] = st_args["seed"]
+
 	# Important file things for automated uploads
 	input_diffusers = f'{st_settings["output_dir"]}/epoch_1'
 	output_filename = ""
@@ -282,29 +285,41 @@ if are_we_constant_cosine:
 		parse_settings(st_settings)
 		if not args.no_exec:
 			subprocess.run(launcher_args)
-		print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
-		time.sleep(5)
-		output_filename = f'{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}.safetensors'
-		output_checkpoint = f'{st_settings["output_dir"]}/{output_filename}'
-		subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
-		# Move the diffusers folder to safety
-		output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}'
-		shutil.move(input_diffusers, output_path)
-		st_settings["pretrained_model_name_or_path"] = output_path
-		print(f"Set pretrained_model_name_or_path to {st_settings['pretrained_model_name_or_path']}")
-		st_settings["use_latents_only"] = True
-
-	if args.webhook != "":
-		file = open(output_checkpoint, "rb")
-		pixeldrain_api = "https://pixeldrain.com/api/file"
-		pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
-		pixeldrain_json = pixeldrain_response.json()
-		if pixeldrain_json["success"]:
-			data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
-			webhook = requests.post(args.webhook, json=data)
+			print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
+			time.sleep(5)
+			output_filename = f'{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}.safetensors'
+			output_checkpoint = f'{st_settings["output_dir"]}/{output_filename}'
+			subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
+			# Move the diffusers folder to safety
+			output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}'
+			shutil.move(input_diffusers, output_path)
 		else:
-			data = {"content": f"PixelDrain is down or something happened during upload. :(", "username": "Fluffusion Trainer"}
-			webhook = requests.post(args.webhook, json=data)
+			output_filename = f'{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}.safetensors'
+			output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}'
+			print(f"Epoch: {e+1}, LR: {st_settings['learning_rate']}, Seed: {st_settings['seed']}, File: {output_filename}")
+		if "epoch_seed" in st_settings:
+			if st_settings["epoch_seed"]:
+				st_settings["seed"] += 1
+		if "use_latents_only" not in st_settings:
+			st_settings["use_latents_only"] = True
+			print("Running from latent cache only.")
+		elif not st_settings["use_latents_only"]:
+			st_settings["use_latents_only"] = True
+			print("Running from latent cache only.")
+		st_settings["pretrained_model_name_or_path"] = output_path
+		print(f"Set pretrained_model_name_or_path to {st_settings['pretrained_model_name_or_path']}\n")
+
+		if args.webhook != "":
+			file = open(output_checkpoint, "rb")
+			pixeldrain_api = "https://pixeldrain.com/api/file"
+			pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
+			pixeldrain_json = pixeldrain_response.json()
+			if pixeldrain_json["success"]:
+				data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
+				webhook = requests.post(args.webhook, json=data)
+			else:
+				data = {"content": f"PixelDrain is down or something happened during upload. :(", "username": "Fluffusion Trainer"}
+				webhook = requests.post(args.webhook, json=data)
 
 else:
 	parse_settings(st_settings)
