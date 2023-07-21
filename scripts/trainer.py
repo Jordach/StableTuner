@@ -2061,20 +2061,7 @@ def main():
                                 encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
                             else:
                                 encoder_hidden_states = text_encoder(batch[0][1])[0]
-                        # Clear cache to prevent memory leakage every now and then
-                        # Clear Python GC and accelerator cache less often than PyTorch cache and when we're using lots of tokens
-                        #if global_step % 2500:
-                            # del clamp_event
-                            # gc.collect()
-                            #torch.cuda.empty_cache()
-                            #accelerator.free_memory()
-                            #print("Clamp event")
-                        # elif global_step % 100 == 0:
-                        #     torch.cuda.empty_cache()
-                        #     #accelerator.free_memory()                    
-                        #     del clamp_event
-                        #     print("100 steps event")
-                        #else:
+
                         del clamp_event
 
                     # Predict the noise residual
