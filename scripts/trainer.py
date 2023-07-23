@@ -1688,8 +1688,7 @@ def main():
 
         print(f" {bcolors.OKGREEN}Loading Latent Cache from {latent_cache_dir}{bcolors.ENDC}")
         del vae
-        if not args.train_text_encoder:
-            del text_encoder
+        
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
@@ -1715,8 +1714,7 @@ def main():
         if gen_cache == False :
             print(f" {bcolors.OKGREEN}Loading Latent Cache from {latent_cache_dir}{bcolors.ENDC}")
             del vae
-            if not args.train_text_encoder:
-                del text_encoder
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
@@ -1766,8 +1764,7 @@ def main():
 
             #clear vram after caching latents
             del vae
-            if not args.train_text_encoder:
-                del text_encoder
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
