@@ -118,6 +118,7 @@ def parse_args():
 
     # Misc Settings
     parser.add_argument("--save_every_n_epoch",            default=1, type=int, help="save on epoch finished")
+    parser.add_argument("--save_every_quarter",            default=False, action="store_true", help="Saves the current epoch for every 25% of all steps completed.")
     parser.add_argument("--output_dir",                    default=None, type=str, required=True, help="The output directory where the model predictions and checkpoints will be written.")
     parser.add_argument("--max_train_steps",               default=None, type=int, help="Total number of training steps to perform. If provided, overrides num_train_epochs.")
     parser.add_argument("--regenerate_latent_cache",       default=False, action="store_true")
@@ -1964,7 +1965,6 @@ def main():
                 with accelerator.accumulate(unet):
                     # Convert images to latent space
                     with torch.no_grad():
-
                         latent_dist = batch[0][0]
                         latents = latent_dist.sample() * 0.18215
                         if args.model_variant == 'inpainting':
@@ -2148,6 +2148,10 @@ def main():
                 progress_bar_inter_epoch.update(1)
                 progress_bar_e.refresh()
                 global_step += 1
+
+                if args.save_every_quarter:
+                    if not global_step % (num_update_steps_per_epoch // 4):
+                        save_and_sample_weights(global_step,'step',save_model=True)
 
                 if mid_checkpoint_step == True:
                     save_and_sample_weights(global_step,'step',save_model=True)

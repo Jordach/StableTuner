@@ -78,6 +78,7 @@ register_arg("pretrained_model_name_or_path", "", "str", "Path to pretrained mod
 register_arg("pretrained_vae_name_or_path", "", "str", "Path to pretrained vae or vae identifier from huggingface.co/models.")
 register_arg("tokenizer_name", "", "str", "Pretrained tokenizer name or path if not the same as model_name.")
 register_arg("use_ema", False, "bool", "Whether or not to use Exponential Moving Average weighting over regular weights. Consumes more memory, slows training performance slightly.")
+register_arg("disable_text_encoder_after", 999, "int", "Disables text encoder training after a specified epoch for constant_cosine.")
 
 # Dataset Settings
 st_comments["header3"] = "Dataset Settings:"
@@ -108,6 +109,7 @@ register_arg("use_deepspeed_adam", False, "bool", "Use experimental DeepSpeed Ad
 # Misc Settings
 st_comments["header5"] = "Misc Settings:"
 register_arg("save_every_n_epoch", 1, "int", "When to save after each epoch completes, 1 will save all epochs, 2 will save every other epoch, and so forth.")
+register_arg("save_every_quarter", False, "bool", "Whether the model should be saved every 25 percent of steps in an epoch.")
 register_arg("output_dir", "", "str", "The output directory where the model checkpoints, logs and latent caches will be saved. This can be anywhere on your computer.")
 register_arg("max_train_steps", -1, "int", "Total number of training steps to perform, if provided, overrides num_train_epochs.")
 register_arg("regenerate_latent_cache", False, "bool", "Regenerates the latent cache, even if it already exists. Very dangerous.")
@@ -214,7 +216,7 @@ if "project_append" not in st_settings:
 # Generate the launch command for StableTuner
 launcher_args = ["accelerate", "launch", '--mixed_precision=fp16', "scripts/trainer.py"]
 
-skip_these_settings = {"project_name": True, "project_append": True}
+skip_these_settings = {"project_name": True, "project_append": True, "disable_text_encoder_after": True}
 def parse_settings(settings):
 	global launcher_args
 	launcher_args = ["accelerate", "launch", '--mixed_precision=fp16', "scripts/trainer.py"]
@@ -306,6 +308,8 @@ if are_we_constant_cosine:
 		elif not st_settings["use_latents_only"]:
 			st_settings["use_latents_only"] = True
 			print("Running from latent cache only.")
+		if e+1 > st_settings["disable_text_encoder_after"] and st_settings["train_text_encoder"]:
+			st_settings["train_text_encoder"] = False
 		st_settings["pretrained_model_name_or_path"] = output_path
 		print(f"Set pretrained_model_name_or_path to {st_settings['pretrained_model_name_or_path']}\n")
 
