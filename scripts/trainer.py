@@ -1961,6 +1961,7 @@ def main():
                     args.stop_text_encoder_training = epoch
             progress_bar_inter_epoch.set_description("Steps To Epoch")
             progress_bar_inter_epoch.reset(total=num_update_steps_per_epoch)
+            e_steps = 0
             for step, batch in enumerate(train_dataloader):
                 with accelerator.accumulate(unet):
                     # Convert images to latent space
@@ -2148,10 +2149,12 @@ def main():
                 progress_bar_inter_epoch.update(1)
                 progress_bar_e.refresh()
                 global_step += 1
+                e_steps += 1
 
                 if args.save_every_quarter:
-                    if not global_step % (num_update_steps_per_epoch // 4):
-                        save_and_sample_weights(global_step,'step',save_model=True)
+                    if not e_steps % (num_update_steps_per_epoch // 4):
+                        if e_steps > 0:
+                            save_and_sample_weights(global_step,'step',save_model=True)
 
                 if mid_checkpoint_step == True:
                     save_and_sample_weights(global_step,'step',save_model=True)
