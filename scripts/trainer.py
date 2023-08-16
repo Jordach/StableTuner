@@ -1911,17 +1911,15 @@ def main():
             pass
 
     # Only show the progress bar once on each machine.
-    progress_bar_inter_epoch = tqdm(range(num_update_steps_per_epoch),bar_format='%s{l_bar}%s%s{bar}%s%s{r_bar}%s'%(bcolors.OKBLUE,bcolors.ENDC, bcolors.OKGREEN, bcolors.ENDC,bcolors.OKBLUE,bcolors.ENDC,), disable=not accelerator.is_local_main_process)
-    progress_bar = tqdm(range(args.max_train_steps),bar_format='%s{l_bar}%s%s{bar}%s%s{r_bar}%s'%(bcolors.OKBLUE,bcolors.ENDC, bcolors.OKBLUE, bcolors.ENDC,bcolors.OKBLUE,bcolors.ENDC,), disable=not accelerator.is_local_main_process)
-    progress_bar_e = tqdm(range(args.num_train_epochs),bar_format='%s{l_bar}%s%s{bar}%s%s{r_bar}%s'%(bcolors.OKBLUE,bcolors.ENDC, bcolors.OKGREEN, bcolors.ENDC,bcolors.OKBLUE,bcolors.ENDC,), disable=not accelerator.is_local_main_process)
+    progress_bar_inter_epoch = tqdm(range(num_update_steps_per_epoch),bar_format='%s{l_bar}%s%s{bar}%s%s{r_bar}%s'%(bcolors.OKBLUE,bcolors.ENDC, bcolors.OKGREEN, bcolors.ENDC,bcolors.OKBLUE,bcolors.ENDC,), disable=not accelerator.is_local_main_process, desc="Steps to Epoch")
+    progress_bar = tqdm(range(args.max_train_steps),bar_format='%s{l_bar}%s%s{bar}%s%s{r_bar}%s'%(bcolors.OKBLUE,bcolors.ENDC, bcolors.OKBLUE, bcolors.ENDC,bcolors.OKBLUE,bcolors.ENDC,), disable=not accelerator.is_local_main_process, desc="Overall Steps")
+    progress_bar_e = tqdm(range(args.num_train_epochs),bar_format='%s{l_bar}%s%s{bar}%s%s{r_bar}%s'%(bcolors.OKBLUE,bcolors.ENDC, bcolors.OKGREEN, bcolors.ENDC,bcolors.OKBLUE,bcolors.ENDC,), disable=not accelerator.is_local_main_process, desc="Overall Epochs")
 
-    progress_bar.set_description("Overall Steps")
-    progress_bar_e.set_description("Overall Epochs")
     global_step = 0
     loss_avg = AverageMeter()
     text_enc_context = nullcontext() if args.train_text_encoder else torch.no_grad()
     try:
-        print(f" {bcolors.OKBLUE}Starting Training!{bcolors.ENDC}")
+        tqdm.write(f" {bcolors.OKBLUE}Starting Training!{bcolors.ENDC}")
 
         mid_generation = False
         mid_checkpoint = False
@@ -1960,7 +1958,6 @@ def main():
                     os.mkdir(frozen_directory)
                     save_and_sample_weights(epoch,'epoch')
                     args.stop_text_encoder_training = epoch
-            progress_bar_inter_epoch.set_description("Steps To Epoch")
             progress_bar_inter_epoch.reset(total=num_update_steps_per_epoch)
             e_steps = 0
             for step, batch in enumerate(train_dataloader):
@@ -2118,7 +2115,6 @@ def main():
                             elif noise_scheduler.config.prediction_type == "v_prediction":
                                 are_we_v_pred = True
 
-                            #loss = torch.nn.functional.mse_loss(model_pred.float(), target.float(), reduction="none")
                             loss = (target.float() - model_pred.float()) ** 2
                             loss = loss.mean([1, 2, 3])
                             loss = tu.apply_snr_weight_neo(are_we_v_pred, loss.float(), timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
