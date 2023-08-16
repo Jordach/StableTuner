@@ -25,6 +25,18 @@ def exists(val):
 def default(val, d):
     return val if exists(val) else d
 
+# Min SNR related:
+def apply_snr_weight_neo(is_v_prediction, loss, timesteps, noise_scheduler, gamma, accelerator):
+    snr = torch.stack([noise_scheduler.all_snr[t] for t in timesteps])
+    min_snr_gamma = torch.minimum(snr, gamma)
+    if is_v_prediction:
+        snr_weight = torch.div(min_snr_gamma, snr + 1).float().to(accelerator.device)
+    else:
+        snr_weight = torch.div(min_snr_gamma, snr).float().to(accelerator.device)
+    loss = loss * snr_weight
+    return loss.to(accelerator.device)
+
+# Zero SNR related:
 def prepare_scheduler_for_custom_training(noise_scheduler, device):
     if hasattr(noise_scheduler, "all_snr"):
         return
@@ -37,14 +49,6 @@ def prepare_scheduler_for_custom_training(noise_scheduler, device):
     all_snr = (alpha / sigma) ** 2
 
     noise_scheduler.all_snr = all_snr.to(device)
-
-def scale_v_prediction_loss_like_noise_prediction(loss, timesteps, noise_scheduler, accelerator):
-    snr_t = torch.stack([noise_scheduler.all_snr[t] for t in timesteps])  # batch_size
-    snr_t = torch.minimum(snr_t, torch.ones_like(snr_t) * 1000)  # if timestep is 0, snr_t is inf, so limit it to 1000
-    scale = snr_t / (snr_t + 1)
-
-    loss = loss * scale.to(accelerator.device)
-    return loss
 
 def enforce_zero_terminal_snr(betas):
     # Convert betas to alphas_bar_sqrt
@@ -64,19 +68,6 @@ def enforce_zero_terminal_snr(betas):
     alphas = alphas_bar[1:] / alphas_bar[:-1]
     alphas = torch.cat([alphas_bar[0:1], alphas])
     return 1 - alphas
-
-def apply_snr_weight(loss, timesteps, noise_scheduler, gamma, adev): 
-    alphas_cumprod = noise_scheduler.alphas_cumprod
-    sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)
-    sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - alphas_cumprod)
-    alpha = sqrt_alphas_cumprod
-    sigma = sqrt_one_minus_alphas_cumprod
-    all_snr = (alpha / sigma) ** 2
-    snr = torch.stack([all_snr[t] for t in timesteps])
-    gamma_over_snr = torch.div(torch.ones_like(snr)*gamma,snr)
-    snr_weight = torch.minimum(gamma_over_snr,torch.ones_like(gamma_over_snr)).float() #from paper
-    loss = loss * snr_weight.to(adev.device)
-    return loss
 
 # flash attention forwards and backwards
 # https://arxiv.org/abs/2205.14135

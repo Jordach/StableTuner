@@ -2108,15 +2108,19 @@ def main():
                         prior_loss = F.mse_loss(model_pred_prior.float(), target_prior.float(), reduction="mean")
                     else:
                         if args.min_snr_gamma or args.scale_v_pred_loss:
-                            loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
-                            loss = loss.mean([1, 2, 3])
-                            loss = loss.to(accelerator.device)
-                            if args.min_snr_gamma:
-                                loss = tu.apply_snr_weight(loss, timesteps.to(accelerator.device), noise_scheduler, args.min_snr_gamma, accelerator)
-                                loss = loss.mean()
-                            if args.scale_v_pred_loss:
-                                loss = tu.scale_v_prediction_loss_like_noise_prediction(loss, timesteps.to(accelerator.device), noise_scheduler, accelerator)
-                                loss = loss.mean()
+                            if args.min_snr_gamma == None:
+                                args.min_snr_gamma = 5
+
+                            are_we_v_pred = False
+                            if args.force_v_pred:
+                                are_we_v_pred = True
+                            elif noise_scheduler.config.prediction_type == "v_prediction":
+                                are_we_v_pred = True
+                            elif args.scale_v_pred_loss:
+                                are_we_v_pred = True
+
+                            loss = tu.apply_snr_weight_neo(are_we_v_pred, (target - model_pred) ** 2, timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
+                            loss = loss.mean()
                         else:
                             loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
