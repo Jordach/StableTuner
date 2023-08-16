@@ -1476,13 +1476,14 @@ def main():
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
     )
-    noise_scheduler = DDPMScheduler.from_config(args.pretrained_model_name_or_path, subfolder="scheduler")
+    noise_scheduler = DDPMScheduler(
+        beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000, clip_sample=False
+    )
+    #noise_scheduler = DDPMScheduler.from_config(args.pretrained_model_name_or_path, subfolder="scheduler")
     if args.zero_terminal_snr:
         print(f" {bcolors.WARNING}Enforcing Zero Terminal SNR.{bcolors.ENDC}")
         noise_scheduler.betas = tu.enforce_zero_terminal_snr(noise_scheduler.betas)
-    #if args.scale_v_pred_loss:
-        #print(f" {bcolors.WARNING}Scaling V-Prediction Loss.{bcolors.ENDC}")
-        #tu.prepare_scheduler_for_custom_training(noise_scheduler, accelerator.device)
+        tu.prepare_scheduler_for_custom_training(noise_scheduler, accelerator.device)
 
     if args.use_latents_only:
         print(f" {bcolors.WARNING}Notice: Running from latent cache only!.{bcolors.ENDC}")
