@@ -2118,8 +2118,11 @@ def main():
                                 are_we_v_pred = True
                             elif args.scale_v_pred_loss:
                                 are_we_v_pred = True
-                            starting_loss = (target.float() - model_pred.float()) ** 2
-                            loss = tu.apply_snr_weight_neo(are_we_v_pred, starting_loss, timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
+
+                            loss = torch.nn.functional.mse_loss(model_pred.float(), target.float(), reduction="none")
+                            loss = loss.mean([1, 2, 3])
+                            loss = (target.float() - model_pred.float()) ** 2
+                            loss = tu.apply_snr_weight_neo(are_we_v_pred, loss, timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
                             loss = loss.mean()
                         else:
                             loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
