@@ -33,7 +33,7 @@ def apply_snr_weight_neo(is_v_prediction, loss, timesteps, noise_scheduler, gamm
         snr_weight = torch.div(min_snr_gamma, snr + 1).float().to(accelerator.device)
     else:
         snr_weight = torch.div(min_snr_gamma, snr).float().to(accelerator.device)
-    loss = torch.tensor(loss, dtype=torch.float) * snr_weight
+    loss = loss * snr_weight
     return loss.to(accelerator.device)
 
 # Zero SNR related:
