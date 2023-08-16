@@ -2118,9 +2118,9 @@ def main():
                             elif noise_scheduler.config.prediction_type == "v_prediction":
                                 are_we_v_pred = True
 
-                            loss = torch.nn.functional.mse_loss(model_pred.float(), target.float(), reduction="none")
+                            #loss = torch.nn.functional.mse_loss(model_pred.float(), target.float(), reduction="none")
+                            loss = (target.float() - model_pred.float()) ** 2
                             loss = loss.mean([1, 2, 3])
-                            #loss = (target.float() - model_pred.float()) ** 2
                             loss = tu.apply_snr_weight_neo(are_we_v_pred, loss.float(), timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
                             loss = loss.mean()
                         else:
