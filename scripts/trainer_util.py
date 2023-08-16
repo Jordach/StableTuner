@@ -28,7 +28,7 @@ def default(val, d):
 # Min SNR related:
 def apply_snr_weight_neo(is_v_prediction, loss, timesteps, noise_scheduler, gamma, accelerator):
     snr = torch.stack([noise_scheduler.all_snr[t] for t in timesteps])
-    min_snr_gamma = torch.minimum(snr, torch.as_tensor(gamma, dtype=torch.float))
+    min_snr_gamma = torch.minimum(snr, float(gamma))
     if is_v_prediction:
         snr_weight = torch.div(min_snr_gamma, snr + 1).float().to(accelerator.device)
     else:
