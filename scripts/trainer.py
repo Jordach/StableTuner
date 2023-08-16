@@ -2108,7 +2108,7 @@ def main():
                         loss = F.mse_loss(model_pred.float(), target.float(), reduction="none").mean([1, 2, 3]).mean()
                         prior_loss = F.mse_loss(model_pred_prior.float(), target_prior.float(), reduction="mean")
                     else:
-                        if args.min_snr_gamma or args.scale_v_pred_loss:
+                        if args.min_snr_gamma:
                             if args.min_snr_gamma == None:
                                 args.min_snr_gamma = 5
 
@@ -2117,13 +2117,11 @@ def main():
                                 are_we_v_pred = True
                             elif noise_scheduler.config.prediction_type == "v_prediction":
                                 are_we_v_pred = True
-                            elif args.scale_v_pred_loss:
-                                are_we_v_pred = True
 
                             loss = torch.nn.functional.mse_loss(model_pred.float(), target.float(), reduction="none")
                             loss = loss.mean([1, 2, 3])
-                            loss = (target.float() - model_pred.float()) ** 2
-                            loss = tu.apply_snr_weight_neo(are_we_v_pred, loss, timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
+                            #loss = (target.float() - model_pred.float()) ** 2
+                            loss = tu.apply_snr_weight_neo(are_we_v_pred, loss.float(), timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
                             loss = loss.mean()
                         else:
                             loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
