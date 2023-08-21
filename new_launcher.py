@@ -288,19 +288,26 @@ if are_we_constant_cosine:
 		output_filename = f'{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}.safetensors'
 		output_checkpoint = f'{st_settings["output_dir"]}/{output_filename}'
 		output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}'
+
+		# Debug printing
 		if args.no_exec:
 			print(f"Using pretrained_model_name_or_path: {st_settings['pretrained_model_name_or_path']}")
 		
 		if not args.no_exec:
 			print(f"Now training Epoch {e+1}.")
+			# Train the epoch
 			subprocess.run(launcher_args)
 			print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
-			time.sleep(5)
+			time.sleep(3)
+			# Convert the epoch
 			subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
 			# Move the diffusers folder to safety
 			shutil.move(input_diffusers, output_path)
 		else:
+			# More debug information
 			print(f"Epoch: {e+1}, LR: {st_settings['learning_rate']}, Seed: {st_settings['seed']}, CKPT: {output_filename}")
+
+		# Process model configuration
 		if "epoch_seed" in st_settings:
 			if st_settings["epoch_seed"]:
 				st_settings["seed"] += 1
@@ -318,6 +325,7 @@ if are_we_constant_cosine:
 			print(f"Diffusers: {input_diffusers}, Rename: {output_path}\n")
 
 		if args.webhook != "" and not args.no_exec:
+			print("Now preparing upload to PixelDrain.")
 			file = open(output_checkpoint, "rb")
 			pixeldrain_api = "https://pixeldrain.com/api/file"
 			pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
@@ -325,8 +333,9 @@ if are_we_constant_cosine:
 			if pixeldrain_json["success"]:
 				data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
 				webhook = requests.post(args.webhook, json=data)
+				print(f"Uploaded to PixelDrain as: https://pixeldrain.com/u/{pixeldrain_json['id']}")
 			else:
-				data = {"content": f"PixelDrain is down or something happened during upload. :(", "username": "Fluffusion Trainer"}
+				data = {"content": f"PixelDrain is down or something happened during upload. :(\nReason: {pixeldrain_json['message']}\nType: {pixeldrain_json['value']}", "username": "Fluffusion Trainer"}
 				webhook = requests.post(args.webhook, json=data)
 
 else:
