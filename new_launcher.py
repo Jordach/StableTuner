@@ -285,20 +285,22 @@ if are_we_constant_cosine:
 		# Handle the cosine decay
 		st_settings["learning_rate"] = cosine_curve(e, max_epochs)
 		parse_settings(st_settings)
+		output_filename = f'{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}.safetensors'
+		output_checkpoint = f'{st_settings["output_dir"]}/{output_filename}'
+		output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}'
+		if args.no_exec:
+			print(f"Using pretrained_model_name_or_path: {st_settings['pretrained_model_name_or_path']}")
+		
 		if not args.no_exec:
+			print(f"Now training Epoch {e+1}.")
 			subprocess.run(launcher_args)
 			print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
 			time.sleep(5)
-			output_filename = f'{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}.safetensors'
-			output_checkpoint = f'{st_settings["output_dir"]}/{output_filename}'
 			subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
 			# Move the diffusers folder to safety
-			output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}'
 			shutil.move(input_diffusers, output_path)
 		else:
-			output_filename = f'{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}.safetensors'
-			output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}'
-			print(f"Epoch: {e+1}, LR: {st_settings['learning_rate']}, Seed: {st_settings['seed']}, File: {output_filename}")
+			print(f"Epoch: {e+1}, LR: {st_settings['learning_rate']}, Seed: {st_settings['seed']}, CKPT: {output_filename}")
 		if "epoch_seed" in st_settings:
 			if st_settings["epoch_seed"]:
 				st_settings["seed"] += 1
@@ -308,12 +310,14 @@ if are_we_constant_cosine:
 		elif not st_settings["use_latents_only"]:
 			st_settings["use_latents_only"] = True
 			print("Running from latent cache only.")
-		if e+1 > st_settings["disable_text_encoder_after"] and st_settings["train_text_encoder"]:
+		if e+1 == st_settings["disable_text_encoder_after"] and st_settings["train_text_encoder"]:
 			st_settings["train_text_encoder"] = False
+			print("Disabling text encoder training.")
 		st_settings["pretrained_model_name_or_path"] = output_path
-		print(f"Set pretrained_model_name_or_path to {st_settings['pretrained_model_name_or_path']}\n")
+		if args.no_exec:
+			print(f"Diffusers: {input_diffusers}, Rename: {output_path}\n")
 
-		if args.webhook != "":
+		if args.webhook != "" and not args.no_exec:
 			file = open(output_checkpoint, "rb")
 			pixeldrain_api = "https://pixeldrain.com/api/file"
 			pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
