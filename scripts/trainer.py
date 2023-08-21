@@ -1939,6 +1939,7 @@ def main():
             token_chunks_limit = 1
 
         for epoch in range(args.num_train_epochs):
+            model_outputs = 0
             #every 10 epochs print instructions
             unet.train()
             if args.train_text_encoder:
@@ -2155,8 +2156,9 @@ def main():
 
                 if args.save_every_quarter:
                     if not e_steps % (num_update_steps_per_epoch // 4):
-                        if e_steps > 0:
+                        if e_steps > 0 and model_outputs < 3:
                             save_and_sample_weights(global_step,'step',save_model=True)
+                            model_outputs += 1
 
                 if mid_checkpoint_step == True:
                     save_and_sample_weights(global_step,'step',save_model=True)
