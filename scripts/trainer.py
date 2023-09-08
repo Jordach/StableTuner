@@ -66,7 +66,7 @@ def parse_args():
     parser.add_argument("--resolution",                    default=512, type=int, help="The resolution for input images, all the images in the train/validation dataset will be resized to this resolution")
     parser.add_argument("--train_batch_size",              default=4, type=int, help="Batch size (per device) for the training dataloader.")
     parser.add_argument("--num_train_epochs",              default=1, type=int)
-    parser.add_argument("--shuffle_per_epoch",             default=False, action="store_true", help="Will shffule the dataset per epoch")
+    parser.add_argument("--shuffle_per_epoch",             default=True, action="store_true", help="Will shffule the dataset per epoch")
     parser.add_argument("--use_bucketing",                 default=False, action="store_true")
     parser.add_argument("--seed",                          default=42, type=int, help="A seed for reproducible training.")
     parser.add_argument("--learning_rate",                 default=5e-6, type=float, help="Initial learning rate (after the potential warmup period) to use.")

@@ -52,7 +52,7 @@ st_comments["header1"] = "Training Settings:"
 register_arg("resolution", 512, "int", "The resolution for all images, and all images will be resied to this resolution.")
 register_arg("train_batch_size", 4, "int", "Batch size (per connected HF Accelerate device) for training with.")
 register_arg("num_train_epochs", 1, "int", "The number of epochs to train.")
-register_arg("shuffle_per_epoch", False, "bool", "Shuffles the order of the batches every epoch.")
+register_arg("shuffle_per_epoch", True, "bool", "Shuffles the order of the batches every epoch.")
 register_arg("use_bucketing", False, "bool", "Whether to use square crops or using the whole image with bucket based resolution.")
 register_arg("seed", 42, "int", "A seed for reproducible training.")
 register_arg("learning_rate", 5e-6, "float", "Initial learning rate (after the a supplied warming period) to use.")
