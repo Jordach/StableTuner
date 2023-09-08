@@ -297,7 +297,7 @@ def get_aspect_buckets(resolution,mode=''):
         raise ValueError("Resolution must be at least 512")
     try: 
         rounded_resolution = int(resolution / 64) * 64
-        print(f" {bcolors.WARNING} Rounded resolution to: {rounded_resolution}{bcolors.ENDC}")   
+        print(f"{bcolors.WARNING} Rounded resolution to: {rounded_resolution}{bcolors.ENDC}")   
         all_image_sizes = __get_all_aspects()
         if mode == 'MJ':
             #truncate to the first 3 resolutions
@@ -307,7 +307,7 @@ def get_aspect_buckets(resolution,mode=''):
         #print(aspects)
         return aspects
     except Exception as e:
-        print(f" {bcolors.FAIL} *** Could not find selected resolution: {rounded_resolution}{bcolors.ENDC}")   
+        print(f"{bcolors.FAIL} *** Could not find selected resolution: {rounded_resolution}{bcolors.ENDC}")   
 
         raise e
 
@@ -377,7 +377,7 @@ class AutoBucketing(Dataset):
         )
         self.seed = seed
         #shared_dataloader = None
-        print(f" {bcolors.WARNING}Creating Auto Bucketing Dataloader{bcolors.ENDC}")
+        print(f"{bcolors.WARNING}Creating Auto Bucketing Dataloader{bcolors.ENDC}")
 
         shared_dataloader = DataLoaderMultiAspect(concepts_list,
          debug_level=debug_level,
@@ -411,7 +411,7 @@ class AutoBucketing(Dataset):
             self._length = max(math.trunc(self.num_train_images * repeats), batch_size) - self.num_train_images % self.batch_size
 
         print()
-        print(f" {bcolors.WARNING} ** Validation Set: {set}, steps: {self._length / batch_size:.0f}, repeats: {repeats} {bcolors.ENDC}")
+        print(f"{bcolors.WARNING} ** Validation Set: {set}, steps: {self._length / batch_size:.0f}, repeats: {repeats} {bcolors.ENDC}")
         print()
 
     
@@ -592,7 +592,7 @@ class ImageTrainItem():
                     self.extra = self.load_image(self.mask_pathname, crop, crop_jitter)
                 else:
                     if self.variant_warning == False:
-                        print(f" {bcolors.FAIL} ** Warning: No mask found for an image, using an empty mask but make sure you're training the right model variant.{bcolors.ENDC}")
+                        print(f"{bcolors.FAIL} ** Warning: No mask found for an image, using an empty mask but make sure you're training the right model variant.{bcolors.ENDC}")
                         self.variant_warning = True
                     self.extra = Image.new('RGB', self.image.size, color="white").convert("L")
             if self.model_variant == "depth2img":
@@ -600,7 +600,7 @@ class ImageTrainItem():
                     self.extra = self.load_image(self.depth_pathname, crop, crop_jitter)
                 else:
                     if self.variant_warning == False:
-                        print(f" {bcolors.FAIL} ** Warning: No depth found for an image, using an empty depth but make sure you're training the right model variant.{bcolors.ENDC}")
+                        print(f"{bcolors.FAIL} ** Warning: No depth found for an image, using an empty depth but make sure you're training the right model variant.{bcolors.ENDC}")
                         self.variant_warning = True
                     self.extra = Image.new('RGB', self.image.size, color="white").convert("L")
         if type(self.image) is not np.ndarray:
@@ -668,10 +668,10 @@ class DataLoaderMultiAspect():
         #print(f"* DLMA resolution {resolution}, buckets: {self.aspects}")
         #process sub directories flag
             
-        print(f" {bcolors.WARNING} Preloading images...{bcolors.ENDC}")   
+        print(f"{bcolors.WARNING} Preloading images...{bcolors.ENDC}")   
 
         if balance_datasets:
-            print(f" {bcolors.WARNING} Balancing datasets...{bcolors.ENDC}") 
+            print(f"{bcolors.WARNING} Balancing datasets...{bcolors.ENDC}") 
             #get the concept with the least number of images in instance_data_dir
             min_concept = min(concept_list, key=lambda x: len(os.listdir(x['instance_data_dir'])))
             #get the number of images in the concept with the least number of images
@@ -714,7 +714,7 @@ class DataLoaderMultiAspect():
             self.__recurse_data_root(self=self, recurse_root=data_root,use_sub_dirs=use_sub_dirs)
             random.Random(self.seed).shuffle(self.image_paths)
             if self.model_variant == 'depth2img':
-                print(f" {bcolors.WARNING} ** Loading Depth2Img Pipeline To Process Dataset{bcolors.ENDC}")
+                print(f"{bcolors.WARNING} ** Loading Depth2Img Pipeline To Process Dataset{bcolors.ENDC}")
                 self.vae_scale_factor = self.extra_module.depth_images(self.image_paths)
             prepared_train_data.extend(self.__prescan_images(debug_level, self.image_paths, flip_p,use_image_names_as_captions,concept_prompt,use_text_files_as_captions=self.use_text_files_as_captions)[0:min_concept_num_images]) # ImageTrainItem[]
             if add_class_images_to_dataset:
@@ -734,19 +734,19 @@ class DataLoaderMultiAspect():
                 self.__recurse_data_root(self=self, recurse_root=data_root_class,use_sub_dirs=use_sub_dirs,class_images=True)
                 random.Random(seed).shuffle(self.image_paths)
                 if self.model_variant == 'depth2img':
-                    print(f" {bcolors.WARNING} ** Depth2Img To Process Class Dataset{bcolors.ENDC}")
+                    print(f"{bcolors.WARNING} ** Depth2Img To Process Class Dataset{bcolors.ENDC}")
                     self.vae_scale_factor = self.extra_module.depth_images(self.image_paths)
                 use_image_names_as_captions = False
                 self.class_image_caption_pairs.extend(self.__prescan_images(debug_level, self.class_images_path, flip_p,use_image_names_as_captions,concept_class_prompt,use_text_files_as_captions=self.use_text_files_as_captions))
             self.class_image_caption_pairs = self.__bucketize_images(self.class_image_caption_pairs, batch_size=batch_size, debug_level=debug_level,aspect_mode=self.aspect_mode,action_preference=self.action_preference)
         if self.model_variant == "inpainting" and mask_prompts is not None:
-            print(f" {bcolors.WARNING} Checking and generating missing masks...{bcolors.ENDC}")
+            print(f"{bcolors.WARNING} Checking and generating missing masks...{bcolors.ENDC}")
             clip_seg = ClipSeg()
             clip_seg.mask_images(self.image_paths, mask_prompts)
             del clip_seg
         if debug_level > 0: print(f" * DLMA Example: {self.image_caption_pairs[0]} images")
         #print the length of image_caption_pairs
-        print(f" {bcolors.WARNING} Number of image-caption pairs: {len(self.image_caption_pairs)}{bcolors.ENDC}") 
+        print(f"{bcolors.WARNING} Number of image-caption pairs: {len(self.image_caption_pairs)}{bcolors.ENDC}") 
         if len(self.image_caption_pairs) == 0:
             raise Exception("All the buckets are empty. Please check your data or reduce the batch size.")
     def get_all_images(self):
@@ -777,7 +777,7 @@ class DataLoaderMultiAspect():
                                 raise ValueError(f" *** Could not find valid text in: {txt_file_path}")
                             
                     except Exception as e:
-                        print(f" {bcolors.FAIL} *** Error reading {txt_file_path} to get caption, falling back to filename{bcolors.ENDC}") 
+                        print(f"{bcolors.FAIL} *** Error reading {txt_file_path} to get caption, falling back to filename{bcolors.ENDC}") 
                         print(e)
                         identifier = caption_from_filename
                         pass
@@ -890,7 +890,7 @@ class DataLoaderMultiAspect():
 
     @staticmethod
     def __recurse_data_root(self, recurse_root,use_sub_dirs=True,class_images=False):
-        progress_bar = tqdm(os.listdir(recurse_root), desc=f" {bcolors.WARNING} ** Processing {recurse_root}{bcolors.ENDC}")
+        progress_bar = tqdm(os.listdir(recurse_root), desc=f"{bcolors.WARNING} ** Processing {recurse_root}{bcolors.ENDC}")
         for f in os.listdir(recurse_root):
             current = os.path.join(recurse_root, f)
             if os.path.isfile(current):
@@ -973,7 +973,7 @@ class NormalDataset(Dataset):
                 for i in range(repeats):
                     self.__recurse_data_root(self, concept,use_sub_dirs=False,class_images=True)
         if self.model_variant == "inpainting" and mask_prompts is not None:
-            print(f" {bcolors.WARNING} Checking and generating missing masks{bcolors.ENDC}")
+            print(f"{bcolors.WARNING} Checking and generating missing masks{bcolors.ENDC}")
             clip_seg = ClipSeg()
             clip_seg.mask_images(self.image_paths, mask_prompts)
             del clip_seg
@@ -984,12 +984,12 @@ class NormalDataset(Dataset):
         self.num_class_images = len(self.class_images_path)
         self._length = max(self.num_class_images, self.num_instance_images)
         if self.model_variant == 'depth2img':
-            print(f" {bcolors.WARNING} ** Loading Depth2Img Pipeline To Process Dataset{bcolors.ENDC}")
+            print(f"{bcolors.WARNING} ** Loading Depth2Img Pipeline To Process Dataset{bcolors.ENDC}")
             self.vae_scale_factor = extra_module.depth_images(self.image_paths)
             if self.with_prior_preservation:
-                print(f" {bcolors.WARNING} ** Loading Depth2Img Class Processing{bcolors.ENDC}")
+                print(f"{bcolors.WARNING} ** Loading Depth2Img Class Processing{bcolors.ENDC}")
                 extra_module.depth_images(self.class_images_path)
-        print(f" {bcolors.WARNING} ** Dataset length: {self._length}, {int(self.num_instance_images / repeats)} images using {repeats} repeats{bcolors.ENDC}")
+        print(f"{bcolors.WARNING} ** Dataset length: {self._length}, {int(self.num_instance_images / repeats)} images using {repeats} repeats{bcolors.ENDC}")
 
         self.image_transforms = transforms.Compose(
             [
@@ -1020,11 +1020,11 @@ class NormalDataset(Dataset):
         #if recurse root is a dict
         if isinstance(recurse_root, dict):
             if class_images == True:
-                #print(f" {bcolors.WARNING} ** Processing class images: {recurse_root['class_data_dir']}{bcolors.ENDC}")
+                #print(f"{bcolors.WARNING} ** Processing class images: {recurse_root['class_data_dir']}{bcolors.ENDC}")
                 concept_token = recurse_root['class_prompt']
                 data = recurse_root['class_data_dir']
             else:
-                #print(f" {bcolors.WARNING} ** Processing instance images: {recurse_root['instance_data_dir']}{bcolors.ENDC}")
+                #print(f"{bcolors.WARNING} ** Processing instance images: {recurse_root['instance_data_dir']}{bcolors.ENDC}")
                 concept_token = recurse_root['instance_prompt']
                 data = recurse_root['instance_data_dir']
 
@@ -1032,7 +1032,7 @@ class NormalDataset(Dataset):
         else:
             concept_token = None
         #progress bar
-        progress_bar = tqdm(os.listdir(data), desc=f" {bcolors.WARNING} ** Processing {data}{bcolors.ENDC}")
+        progress_bar = tqdm(os.listdir(data), desc=f"{bcolors.WARNING} ** Processing {data}{bcolors.ENDC}")
         for f in os.listdir(data):
             current = os.path.join(data, f)
             if os.path.isfile(current):
@@ -1081,7 +1081,7 @@ class NormalDataset(Dataset):
                 mask = Image.open(mask_pathname).convert("L")
             else:
                 if self.variant_warning == False:
-                    print(f" {bcolors.FAIL} ** Warning: No mask found for an image, using an empty mask but make sure you're training the right model variant.{bcolors.ENDC}")
+                    print(f"{bcolors.FAIL} ** Warning: No mask found for an image, using an empty mask but make sure you're training the right model variant.{bcolors.ENDC}")
                     self.variant_warning = True
                 size = instance_image.size
                 mask = Image.new('RGB', size, color="white").convert("L")
@@ -1092,7 +1092,7 @@ class NormalDataset(Dataset):
                 depth_image = Image.open(depth_pathname).convert("L")
             else:
                 if self.variant_warning == False:
-                    print(f" {bcolors.FAIL} ** Warning: No depth image found for an image, using an empty depth image but make sure you're training the right model variant.{bcolors.ENDC}")
+                    print(f"{bcolors.FAIL} ** Warning: No depth image found for an image, using an empty depth image but make sure you're training the right model variant.{bcolors.ENDC}")
                     self.variant_warning = True
                 size = instance_image.size
                 depth_image = Image.new('RGB', size, color="white").convert("L")
@@ -1135,7 +1135,7 @@ class NormalDataset(Dataset):
                     mask = Image.open(mask_pathname).convert("L")
                 else:
                     if self.variant_warning == False:
-                        print(f" {bcolors.FAIL} ** Warning: No mask found for an image, using an empty mask but make sure you're training the right model variant.{bcolors.ENDC}")
+                        print(f"{bcolors.FAIL} ** Warning: No mask found for an image, using an empty mask but make sure you're training the right model variant.{bcolors.ENDC}")
                         self.variant_warning = True
                     size = instance_image.size
                     mask = Image.new('RGB', size, color="white").convert("L")
@@ -1146,7 +1146,7 @@ class NormalDataset(Dataset):
                     depth_image = Image.open(depth_pathname)
                 else:
                     if self.variant_warning == False:
-                        print(f" {bcolors.FAIL} ** Warning: No depth image found for an image, using an empty depth image but make sure you're training the right model variant.{bcolors.ENDC}")
+                        print(f"{bcolors.FAIL} ** Warning: No depth image found for an image, using an empty depth image but make sure you're training the right model variant.{bcolors.ENDC}")
                         self.variant_warning = True
                     size = instance_image.size
                     depth_image = Image.new('RGB', size, color="white").convert("L")
@@ -1293,8 +1293,8 @@ def get_full_repo_name(model_id: str, organization: Optional[str] = None, token:
         return f"{organization}/{model_id}"
 
 def main():
-    print(f" {bcolors.OKBLUE}Booting Up StableTuner{bcolors.ENDC}") 
-    print(f" {bcolors.OKBLUE}Please wait a moment as we load up some stuff...{bcolors.ENDC}") 
+    print(f"{bcolors.OKBLUE}Booting Up StableTuner{bcolors.ENDC}") 
+    print(f"{bcolors.OKBLUE}Please wait a moment as we load up some stuff...{bcolors.ENDC}") 
     #torch.cuda.set_per_process_memory_fraction(0.5)
     args = parse_args()
     if args.disable_cudnn_benchmark:
@@ -1481,12 +1481,12 @@ def main():
     )
     #noise_scheduler = DDPMScheduler.from_config(args.pretrained_model_name_or_path, subfolder="scheduler")
     if args.zero_terminal_snr:
-        print(f" {bcolors.WARNING}Enforcing Zero Terminal SNR.{bcolors.ENDC}")
+        print(f"{bcolors.WARNING}Enforcing Zero Terminal SNR.{bcolors.ENDC}")
         noise_scheduler.betas = tu.enforce_zero_terminal_snr(noise_scheduler.betas)
         tu.prepare_scheduler_for_custom_training(noise_scheduler, accelerator.device)
 
     if args.use_latents_only:
-        print(f" {bcolors.WARNING}Notice: Running from latent cache only!.{bcolors.ENDC}")
+        print(f"{bcolors.WARNING}Notice: Running from latent cache only!.{bcolors.ENDC}")
     elif not args.use_latents_only or args.regenerate_latent_cache:
         if args.use_bucketing:
             train_dataset = AutoBucketing(
@@ -1611,12 +1611,12 @@ def main():
                 last_run_batch_size = last_run["batch_size"]
                 last_run_dataset_length = last_run["dataset_length"]
                 if last_run_batch_size != args.train_batch_size:
-                    print(f" {bcolors.WARNING}The batch_size has changed since the last run. Regenerating Latent Cache.{bcolors.ENDC}") 
+                    print(f"{bcolors.WARNING}The batch_size has changed since the last run. Regenerating Latent Cache.{bcolors.ENDC}") 
 
                     args.regenerate_latent_cache = True
                     #save the new batch_size and dataset_length to last_run.json
                 if last_run_dataset_length != train_dataset_length:
-                    print(f" {bcolors.WARNING}The dataset length has changed since the last run. Regenerating Latent Cache.{bcolors.ENDC}") 
+                    print(f"{bcolors.WARNING}The dataset length has changed since the last run. Regenerating Latent Cache.{bcolors.ENDC}") 
 
                     args.regenerate_latent_cache = True
                     #save the new batch_size and dataset_length to last_run.json
@@ -1636,7 +1636,7 @@ def main():
                 last_run = json.load(f)
                 last_run_batch_size = last_run["batch_size"]
                 if last_run_batch_size != args.train_batch_size:
-                    print(f" {bcolors.WARNING}The batch_size has changed since the last run.{bcolors.ENDC}") 
+                    print(f"{bcolors.WARNING}The batch_size has changed since the last run.{bcolors.ENDC}") 
                     raise Exception("Cannot comply, as mixed latent lengths may be present, please regenerate them.")
         else:
             raise Exception("Cannot comply, last_run.json not found.")
@@ -1676,6 +1676,7 @@ def main():
     model_variant=args.model_variant,
     shuffle_per_epoch=args.shuffle_per_epoch,
     args = args,)
+    print(f"{bcolors.WARNING}Shuffling Latent Cache from {latent_cache_dir}{bcolors.ENDC}")
 
     gen_cache = False
     #data_len = len(train_dataloader)
@@ -1688,7 +1689,7 @@ def main():
         if len(os.listdir(latent_cache_dir)) == 0:
             raise Exception("Cannot load latents when there are no latent caches.")
 
-        print(f" {bcolors.OKGREEN}Loading Latent Cache from {latent_cache_dir}{bcolors.ENDC}")
+        print(f"{bcolors.OKGREEN}Loading Latent Cache from {latent_cache_dir}{bcolors.ENDC}")
         del vae
         
         if torch.cuda.is_available():
@@ -1713,8 +1714,8 @@ def main():
                 gen_cache = True
                 for file in files:
                     os.remove(os.path.join(latent_cache_dir,file))
-        if gen_cache == False :
-            print(f" {bcolors.OKGREEN}Loading Latent Cache from {latent_cache_dir}{bcolors.ENDC}")
+        if gen_cache == False:
+            print(f"{bcolors.OKGREEN}Loading Latent Cache from {latent_cache_dir}{bcolors.ENDC}")
             del vae
 
             if torch.cuda.is_available():
@@ -1725,7 +1726,7 @@ def main():
                 cached_dataset.add_pt_cache(os.path.join(latent_cache_dir,f"latents_cache_{i}.pt"))
         if gen_cache == True:
             #delete all the cached latents if they exist to avoid problems
-            print(f" {bcolors.WARNING}Generating latents cache...{bcolors.ENDC}")
+            print(f"{bcolors.WARNING}Generating latents cache...{bcolors.ENDC}")
             train_dataset = LatentsDataset([], [], [], [], [])
             counter = 0
             ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -1744,6 +1745,9 @@ def main():
                         cached_conditioning_latent = vae.encode(batch["pixel_values"] * (1 - batch["extra_values"])).latent_dist
                         cached_extra = functional.resize(batch["extra_values"], size=cached_conditioning_latent.mean.shape[2:])
                     cached_latent = vae.encode(batch["pixel_values"]).latent_dist
+                    # cached_latent = [vae.encode(batch["pixel_values"][k]).latent_dist for k in batch["pixel_values"]]
+                    # cached_latent = torch.FloatTensor(cached_latent)
+                    # cached_latent = cached_latent.to(accelerator.device, non_blocking=True, dtype=weight_dtype)
                     if args.train_text_encoder:
                         cached_text_enc = batch["input_ids"]
                     else:
@@ -1772,7 +1776,7 @@ def main():
                 torch.cuda.ipc_collect()
         #load all the cached latents into a single dataset
     train_dataloader = torch.utils.data.DataLoader(cached_dataset, batch_size=1, collate_fn=lambda x: x, shuffle=False)
-    print(f" {bcolors.OKGREEN}Latents are ready.{bcolors.ENDC}")
+    print(f"{bcolors.OKGREEN}Latents are ready.{bcolors.ENDC}")
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
     num_update_steps_per_epoch = len(train_dataloader)
@@ -1919,7 +1923,7 @@ def main():
     loss_avg = AverageMeter()
     text_enc_context = nullcontext() if args.train_text_encoder else torch.no_grad()
     try:
-        tqdm.write(f" {bcolors.OKBLUE}Starting Training!{bcolors.ENDC}")
+        tqdm.write(f"{bcolors.OKBLUE}Starting Training!{bcolors.ENDC}")
 
         mid_generation = False
         mid_checkpoint = False
@@ -1948,7 +1952,7 @@ def main():
             if args.train_text_encoder and args.stop_text_encoder_training == epoch:
                 args.stop_text_encoder_training = True
                 if accelerator.is_main_process:
-                    print(f" {bcolors.WARNING} Stopping text encoder training{bcolors.ENDC}")   
+                    print(f"{bcolors.WARNING} Stopping text encoder training{bcolors.ENDC}")   
                     current_percentage = (epoch/args.num_train_epochs)*100
                     #round to the nearest whole number
                     current_percentage = round(current_percentage,0)
