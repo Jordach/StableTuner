@@ -19,6 +19,7 @@ parser.add_argument("--webhook", default="", help="The Discord webhook that you 
 parser.add_argument("--show_unchanged_settings", action="store_true", help="Shows which config lines are redundant.")
 parser.add_argument("--hide_ignored_settings", action="store_true", help="Cleans up output for messy or broken configs.")
 parser.add_argument("--no_exec", action="store_true", help="Disables execution of subprocesses and file copy ops")
+parser.add_argument("--resume_ccosine", type=int, default=-1, help="Resumes constant cosine from supplied epoch value.")
 parser.add_argument("--convert", action="store_true", help="Converts diffusers to epochs")
 
 args = parser.parse_args()
@@ -289,23 +290,24 @@ if are_we_constant_cosine:
 		output_checkpoint = f'{st_settings["output_dir"]}/{output_filename}'
 		output_path = f'{st_settings["output_dir"]}/{st_settings["project_name"]}_e{e+1}_{st_settings["project_append"]}'
 
-		# Debug printing
-		if args.no_exec:
-			print(f"Using pretrained_model_name_or_path: {st_settings['pretrained_model_name_or_path']}")
-		
-		if not args.no_exec:
-			print(f"Now training Epoch {e+1}.")
-			# Train the epoch
-			subprocess.run(launcher_args)
-			print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
-			time.sleep(3)
-			# Convert the epoch
-			subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
-			# Move the diffusers folder to safety
-			shutil.move(input_diffusers, output_path)
-		else:
-			# More debug information
-			print(f"Epoch: {e+1}, LR: {st_settings['learning_rate']}, Seed: {st_settings['seed']}, CKPT: {output_filename}")
+		if e >= args.resume_ccosine-1:
+			# Debug printing
+			if args.no_exec:
+				print(f"Using pretrained_model_name_or_path: {st_settings['pretrained_model_name_or_path']}")
+			
+			if not args.no_exec:
+				print(f"Now training Epoch {e+1}.")
+				# Train the epoch
+				subprocess.run(launcher_args)
+				print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
+				time.sleep(3)
+				# Convert the epoch
+				subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
+				# Move the diffusers folder to safety
+				shutil.move(input_diffusers, output_path)
+			else:
+				# More debug information
+				print(f"Epoch: {e+1}, LR: {st_settings['learning_rate']}, Seed: {st_settings['seed']}, CKPT: {output_filename}")
 
 		# Process model configuration
 		if "epoch_seed" in st_settings:
@@ -321,22 +323,24 @@ if are_we_constant_cosine:
 			st_settings["train_text_encoder"] = False
 			print("Disabling text encoder training.")
 		st_settings["pretrained_model_name_or_path"] = output_path
-		if args.no_exec:
-			print(f"Diffusers: {input_diffusers}, Rename: {output_path}\n")
 
-		if args.webhook != "" and not args.no_exec:
-			print("Now preparing upload to PixelDrain.")
-			file = open(output_checkpoint, "rb")
-			pixeldrain_api = "https://pixeldrain.com/api/file"
-			pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
-			pixeldrain_json = pixeldrain_response.json()
-			if pixeldrain_json["success"]:
-				data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
-				webhook = requests.post(args.webhook, json=data)
-				print(f"Uploaded to PixelDrain as: https://pixeldrain.com/u/{pixeldrain_json['id']}")
-			else:
-				data = {"content": f"PixelDrain is down or something happened during upload. :(\nReason: {pixeldrain_json['message']}\nType: {pixeldrain_json['value']}", "username": "Fluffusion Trainer"}
-				webhook = requests.post(args.webhook, json=data)
+		if e >= args.resume_ccosine-1:
+			if args.no_exec:
+				print(f"Diffusers: {input_diffusers}, Rename: {output_path}\n")
+
+			if args.webhook != "" and not args.no_exec:
+				print("Now preparing upload to PixelDrain.")
+				file = open(output_checkpoint, "rb")
+				pixeldrain_api = "https://pixeldrain.com/api/file"
+				pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
+				pixeldrain_json = pixeldrain_response.json()
+				if pixeldrain_json["success"]:
+					data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
+					webhook = requests.post(args.webhook, json=data)
+					print(f"Uploaded to PixelDrain as: https://pixeldrain.com/u/{pixeldrain_json['id']}")
+				else:
+					data = {"content": f"PixelDrain is down or something happened during upload. :(\nReason: {pixeldrain_json['message']}\nType: {pixeldrain_json['value']}", "username": "Fluffusion Trainer"}
+					webhook = requests.post(args.webhook, json=data)
 
 else:
 	parse_settings(st_settings)
