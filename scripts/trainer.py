@@ -1676,7 +1676,8 @@ def main():
     model_variant=args.model_variant,
     shuffle_per_epoch=args.shuffle_per_epoch,
     args = args,)
-    print(f"{bcolors.WARNING}Shuffling Latent Caches.{bcolors.ENDC}")
+    if args.shuffle_per_epoch:
+        print(f"{bcolors.WARNING}Will shuffle Latent Caches.{bcolors.ENDC}")
 
     gen_cache = False
     #data_len = len(train_dataloader)
