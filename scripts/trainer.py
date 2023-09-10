@@ -1254,7 +1254,7 @@ class CachedLatentsDataset(Dataset):
             self.cache_paths += (cache_path,)
 
 class LatentsDataset(Dataset):
-    def __init__(self, latents_cache=None, text_encoder_cache=None, conditioning_latent_cache=None, extra_cache=None,tokens_cache=None):
+    def __init__(self, latents_cache=None, text_encoder_cache=None, conditioning_latent_cache=None, extra_cache=None, tokens_cache=None):
         self.latents_cache = latents_cache
         self.text_encoder_cache = text_encoder_cache
         self.conditioning_latent_cache = conditioning_latent_cache
@@ -1676,7 +1676,7 @@ def main():
     model_variant=args.model_variant,
     shuffle_per_epoch=args.shuffle_per_epoch,
     args = args,)
-    print(f"{bcolors.WARNING}Shuffling Latent Cache from {latent_cache_dir}{bcolors.ENDC}")
+    print(f"{bcolors.WARNING}Shuffling Latent Caches.{bcolors.ENDC}")
 
     gen_cache = False
     #data_len = len(train_dataloader)
@@ -1751,6 +1751,7 @@ def main():
                     if args.train_text_encoder:
                         cached_text_enc = batch["input_ids"]
                     else:
+                        # Insert token processing logic here lad
                         cached_text_enc = text_encoder(batch["input_ids"])[0]
                     train_dataset.add_latent(cached_latent, cached_text_enc, cached_conditioning_latent, cached_extra, batch["tokens"])
                     del batch
@@ -1904,9 +1905,6 @@ def main():
                         torch.cuda.ipc_collect()
                 if save_model == True:
                     print(f"{bcolors.OKGREEN}Weights saved to {save_dir}{bcolors.ENDC}")
-                elif save_model == False and len(imgs) > 0:
-                    del imgs
-                    print(f"{bcolors.OKGREEN}Samples saved to {sample_dir}{bcolors.ENDC}")
                 if args.use_ema:
                     ema_unet.restore(unwrapped_unet.parameters())
         except Exception as e:
@@ -1992,6 +1990,7 @@ def main():
                         # (this is the forward diffusion process)
                         noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps, device=latents.device)
 
+                    # TODO MOVE ME TO A FUNCTION
                     # Get the text embedding for conditioning
                     with text_enc_context:
                         tru_len = max(len(x) for x in batch[0][1])
@@ -2018,12 +2017,8 @@ def main():
                                 # Hard limit the tokens to fit in memory for the rare event that latent caches that somehow exceed the limit.
                                 if clamp_chunk > (token_chunks_limit):
                                     #print("\nWARNING: Clamped abnormal amount of tokens.\n")
-                                    clamp_event = True
                                     del chunk
                                     break
-                                # If we're close to reaching our limit of tokens, force a cache cleaning, and continue
-                                elif clamp_chunk > (token_chunks_limit - 1):
-                                    clamp_event = True
 
                                 chunk = chunk.to(accelerator.device)
                                 chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1)
