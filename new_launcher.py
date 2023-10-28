@@ -108,6 +108,7 @@ register_arg("adam_epsilon", 1e-8, "float", "Epsilon value for the Adam optimise
 register_arg("max_grad_norm", 1.0, "float", "Maximum gradient norm.")
 register_arg("use_deepspeed_adam", False, "bool", "Use experimental DeepSpeed Adam 8bit.")
 register_arg("use_torch_compile", False, "bool", "Whether to compile certain functions with Torch 2.")
+register_arg("move_te_cpu", False, "bool", "Whether to move the Text Encoder to the CPU when not being used.")
 
 # Misc Settings
 st_comments["header5"] = "Misc Settings:"
