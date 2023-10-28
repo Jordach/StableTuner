@@ -1945,25 +1945,25 @@ def main():
         
         get_noisy_latents = tu.get_noisy_latents
         if args.use_torch_compile:
-            get_noisy_latents = torch.compile(tu.get_noisy_latents)
+            get_noisy_latents = torch.compile(tu.get_noisy_latents, mode="reduce-overhead")
 
         get_embeddings = ""
         if args.train_text_encoder:
             get_embeddings = tu.text_encoder_training
             if args.use_torch_compile:
-                get_embeddings = torch.compile(tu.text_encoder_training)
+                get_embeddings = torch.compile(tu.text_encoder_training, mode="reduce-overhead")
         else:
             get_embeddings = tu.text_encoder_inference
             if args.use_torch_compile:
-                get_embeddings = torch.compile(tu.text_encoder_inference)
+                get_embeddings = torch.compile(tu.text_encoder_inference, mode="reduce-overhead")
 
         get_unet_noise = tu.predict_unet_noise
         if args.use_torch_compile:
-            get_unet_noise = torch.compile(tu.predict_unet_noise)
+            get_unet_noise = torch.compile(tu.predict_unet_noise, mode="reduce-overhead")
 
         get_loss = tu.get_batch_loss
         if args.use_torch_compile:
-            get_loss = torch.compile(tu.get_batch_loss)
+            get_loss = torch.compile(tu.get_batch_loss, mode="reduce-overhead")
 
         for epoch in range(args.num_train_epochs):
             model_outputs = 0
