@@ -107,7 +107,10 @@ register_arg("adam_weight_decay", 1e-2, "float", "Weight decay for the Adam opti
 register_arg("adam_epsilon", 1e-8, "float", "Epsilon value for the Adam optimiser.")
 register_arg("max_grad_norm", 1.0, "float", "Maximum gradient norm.")
 register_arg("use_deepspeed_adam", False, "bool", "Use experimental DeepSpeed Adam 8bit.")
-register_arg("use_torch_compile", False, "bool", "Whether to compile certain functions with Torch 2.")
+register_arg("training_workers", 1, "int", "How many PyTorch threads should be used while training.")
+register_arg("training_prefetch", 2, "int", "How many batches should PyTorch preload while training.")
+register_arg("dataset_workers", 1, "int", "How many PyTorch threads should be used while preparing the dataset for latent caching.")
+register_arg("dataset_prefetch", 2, "int", "How many batches should PyTorch preload while preparing the dataset for latent caching.")
 
 # Misc Settings
 st_comments["header5"] = "Misc Settings:"

@@ -116,8 +116,11 @@ def parse_args():
     parser.add_argument("--adam_weight_decay",             default=1e-2, type=float, help="Weight decay to use.")
     parser.add_argument("--adam_epsilon",                  default=1e-08, type=float, help="Epsilon value for the Adam optimizer")
     parser.add_argument("--max_grad_norm",                 default=1.0, type=float, help="Max gradient norm.")
-    parser.add_argument("--use_torch_compile",             default=False, action="store_true", help="Use Torch Compilation to speed up training.")
     parser.add_argument("--use_deepspeed_adam",            default=False, action="store_true", help="Use experimental DeepSpeed Adam 8.")
+    parser.add_argument("--training_workers",              default=1, type=int, help="How many PyTorch threads should be used while training.")
+    parser.add_argument("--training_prefetch",             default=2, type=int, help="How many batches should PyTorch preload while training.")
+    parser.add_argument("--dataset_workers",               default=1, type=int, help="How many PyTorch threads should be used while preparing the dataset for latent caching.")
+    parser.add_argument("--dataset_prefetch",              default=2, type=int, help="How many batches should PyTorch preload while preparing the dataset for latent caching.")
 
     # Misc Settings
     parser.add_argument("--save_every_n_epoch",            default=1, type=int, help="save on epoch finished")
@@ -154,6 +157,9 @@ def parse_args():
 
     return args
 
+def add_ratio_to_bucket(x, y, bucket):
+    bucket.append([x, y])
+    bucket.append([y, x])
 
 ASPECT_832 = [[832, 832], 
 [896, 768], [768, 896], 
@@ -217,20 +223,40 @@ ASPECT_768 = [[768,768],   # 589824 1:1
     [1536,320],[320,1536], # 491520 4.8:1
 ]
 
-ASPECT_704 = [[704,704],     # 501,376 1:1
-    [768,640],[640,768],   # 491,520 1.2:1
-    [832,576],[576,832],   # 458,752 1.444:1
-    [896,512],[512,896],   # 458,752 1.75:1
-    [960,512],[512,960],   # 491,520 1.875:1
-    [1024,448],[448,1024], # 458,752 2.286:1
-    [1088,448],[448,1088], # 487,424 2.429:1
-    [1152,384],[384,1152], # 442,368 3:1
-    [1216,384],[384,1216], # 466,944 3.125:1
-    [1280,384],[384,1280], # 491,520 3.333:1
-    [1280,320],[320,1280], # 409,600 4:1
-    [1408,320],[320,1408], # 450,560 4.4:1
-    [1536,320],[320,1536], # 491,520 4.8:1
-]
+ASPECT_704 = [[704,704]]                   # 495616 1:1
+add_ratio_to_bucket(688, 720, ASPECT_704)  # 495360 1.05:1
+add_ratio_to_bucket(672, 736, ASPECT_704)  # 494592 1.1:1
+add_ratio_to_bucket(656, 752, ASPECT_704)  # 493312 1.15:1
+add_ratio_to_bucket(640, 768, ASPECT_704)  # 491520 1.2:1
+add_ratio_to_bucket(624, 784, ASPECT_704)  # 489216 1.25:1
+add_ratio_to_bucket(616, 800, ASPECT_704)  # 492800 1.3:1
+add_ratio_to_bucket(606, 818, ASPECT_704)  # 491264 1.33:1
+add_ratio_to_bucket(592, 832, ASPECT_704)  # 492544 1.4:1
+add_ratio_to_bucket(584, 848, ASPECT_704)  # 495232 1.45:1
+add_ratio_to_bucket(568, 856, ASPECT_704)  # 486208 1.5:1
+add_ratio_to_bucket(560, 872, ASPECT_704)  # 488320 1.55:1
+add_ratio_to_bucket(552, 888, ASPECT_704)  # 490176 1.6:1
+add_ratio_to_bucket(544, 904, ASPECT_704)  # 491776 1.66:1
+add_ratio_to_bucket(536, 912, ASPECT_704)  # 488832 1.7:1
+add_ratio_to_bucket(528, 936, ASPECT_704)  # 494208 1.778:1
+add_ratio_to_bucket(512, 952, ASPECT_704)  # 487424 1.85:1
+add_ratio_to_bucket(512, 968, ASPECT_704)  # 495616 1.9:1
+add_ratio_to_bucket(496, 992, ASPECT_704)  # 492032 2:1
+add_ratio_to_bucket(464, 1048, ASPECT_704) # 468272 2.25:1
+add_ratio_to_bucket(440, 1104, ASPECT_704) # 485760 2.5:1
+add_ratio_to_bucket(424, 1168, ASPECT_704) # 495232 2.75:1
+add_ratio_to_bucket(400, 1208, ASPECT_704) # 483200 3:1
+add_ratio_to_bucket(384, 1248, ASPECT_704) # 479232 3.25:1
+add_ratio_to_bucket(368, 1288, ASPECT_704) # 473984 3.5:1
+add_ratio_to_bucket(360, 1352, ASPECT_704) # 486720 3.75:1
+add_ratio_to_bucket(352, 1408, ASPECT_704) # 495616 4:1
+add_ratio_to_bucket(336, 1440, ASPECT_704) # 483840 4.25:1
+add_ratio_to_bucket(328, 1488, ASPECT_704) # 488064 4.5:1
+add_ratio_to_bucket(320, 1520, ASPECT_704) # 486400 4.75:1
+add_ratio_to_bucket(312, 1520, ASPECT_704) # 486720 5:1
+add_ratio_to_bucket(296, 1632, ASPECT_704) # 483072 5.5:1
+add_ratio_to_bucket(280, 1680, ASPECT_704) # 470400 6:1
+add_ratio_to_bucket(280, 1768, ASPECT_704) # 495040 6.25:1
 
 ASPECT_640 = [[640,640],   # 409600 1:1
     [616,560],[560,616],   # 344960 1.1:1
@@ -858,7 +884,7 @@ class DataLoaderMultiAspect():
             if action == None:
                 #print('test')
                 current_bucket_size = bucket_len
-                print(f"  ** Bucket {bucket} ({bmode}) found {bucket_len}, nice!")
+                print(f"  ** Bucket {bucket} {bmode} found {bucket_len}, nice!")
             elif action == 'add':
                 #copy the bucket
                 shuffleBucket = random.sample(buckets[bucket], bucket_len)
@@ -874,9 +900,9 @@ class DataLoaderMultiAspect():
                         #print(str(randomIndex))
                         buckets[bucket].append(shuffleBucket[randomIndex])
                         added+=1
-                    print(f"  ** Bucket {bucket} ({bmode}) found {bucket_len}  images, will {bcolors.OKCYAN}duplicate {added} images{bcolors.ENDC} due to batch size {bcolors.WARNING}{batch_size}{bcolors.ENDC}")
+                    print(f"  ** Bucket {bucket} {bmode} found {bucket_len}  images, will {bcolors.OKCYAN}duplicate {added} images{bcolors.ENDC} due to batch size {bcolors.WARNING}{batch_size}{bcolors.ENDC}")
                 else:
-                    print(f"  ** Bucket {bucket} ({bmode}) found {bucket_len}, {bcolors.OKGREEN}nice!{bcolors.ENDC}")
+                    print(f"  ** Bucket {bucket} {bmode} found {bucket_len}, {bcolors.OKGREEN}nice!{bcolors.ENDC}")
             elif action == 'truncate':
                 truncate_count = (bucket_len) % batch_size
                 current_bucket_size = bucket_len
@@ -1316,7 +1342,6 @@ def main():
     #create output directory
     if not Path(args.output_dir).exists():
         Path(args.output_dir).mkdir(parents=True)
-    
 
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
@@ -1615,7 +1640,7 @@ def main():
         
         print(f"{bcolors.WARNING}PyTorch's dataloader takes a while, so this may appear to be frozen for a very long time.{bcolors.ENDC}") 
         train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=args.train_batch_size, shuffle=False, collate_fn=collate_fn, pin_memory=True,
+            train_dataset, batch_size=args.train_batch_size, shuffle=False, collate_fn=collate_fn, pin_memory=True, prefetch_factor=args.dataset_prefetch, num_workers=args.dataset_workers
         )
         #get the length of the dataset
         train_dataset_length = len(train_dataset)
@@ -1787,7 +1812,7 @@ def main():
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
         #load all the cached latents into a single dataset
-    train_dataloader = torch.utils.data.DataLoader(cached_dataset, batch_size=1, collate_fn=lambda x: x, shuffle=False)
+    train_dataloader = torch.utils.data.DataLoader(cached_dataset, batch_size=1, collate_fn=lambda x: x, shuffle=False, prefetch_factor=args.training_prefetch, num_workers=args.training_workers)
     print(f"{bcolors.OKGREEN}Latents are ready.{bcolors.ENDC}")
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
