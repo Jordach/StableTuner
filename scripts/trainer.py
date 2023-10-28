@@ -787,7 +787,7 @@ class DataLoaderMultiAspect():
         """
         decorated_image_train_items = []
         
-        for pathname in image_paths:
+        for pathname in tqdm(image_paths, desc="Scanning Images"):
             identifier = concept 
             if use_image_names_as_captions:
                 caption_from_filename = os.path.splitext(os.path.basename(pathname))[0].split("_")[0]
@@ -828,7 +828,7 @@ class DataLoaderMultiAspect():
 
         # TODO: this is not terribly efficient but at least linear time
         buckets = {}
-        for image_caption_pair in prepared_train_data:
+        for image_caption_pair in tqdm(prepared_train_data, desc="Preparing buckets"):
             target_wh = image_caption_pair.target_wh
 
             if (target_wh[0],target_wh[1]) not in buckets:
