@@ -1635,8 +1635,6 @@ def main():
         return batch
     
     if not args.use_latents_only or args.regenerate_latent_cache:
-        
-        print(f"{bcolors.WARNING}PyTorch's dataloader takes a while, so this may appear to be frozen for a very long time.{bcolors.ENDC}") 
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset, batch_size=args.train_batch_size, shuffle=False, collate_fn=collate_fn, pin_memory=True, prefetch_factor=args.dataset_prefetch, num_workers=args.dataset_workers
         )
