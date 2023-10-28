@@ -44,6 +44,7 @@ from transformers import CLIPTextModel, CLIPTokenizer
 from typing import Dict, List, Generator, Tuple
 from PIL import Image, ImageFile
 from diffusers.utils.import_utils import is_xformers_available
+from lion_pytorch import Lion
 import trainer_util as tu
 
 from clip_segmentation import ClipSeg
@@ -109,6 +110,7 @@ def parse_args():
     parser.add_argument("--gradient_checkpointing",        default=False, action="store_true", help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.")
     parser.add_argument("--scale_lr",                      default=False, action="store_true", help="Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.")
     parser.add_argument("--use_8bit_adam",                 default=False, action="store_true", help="Whether or not to use 8-bit Adam from bitsandbytes.")
+    parser.add_argument("--use_lion",                      default=False, action="store_true", help="Whether or not to use Lion.")
     parser.add_argument("--adam_beta1",                    default=0.9, type=float, help="The beta1 parameter for the Adam optimizer.")
     parser.add_argument("--adam_beta2",                    default=0.999, type=float, help="The beta2 parameter for the Adam optimizer.")
     parser.add_argument("--adam_weight_decay",             default=1e-2, type=float, help="Weight decay to use.")
@@ -1450,6 +1452,7 @@ def main():
     if args.use_8bit_adam and args.use_deepspeed_adam==False:
         try:
             import bitsandbytes as bnb
+            print("Using 8bitAdam")
         except ImportError:
             raise ImportError(
                 "To use 8-bit Adam, please install the bitsandbytes library: `pip install bitsandbytes`."
@@ -1464,19 +1467,30 @@ def main():
             )
         
         optimizer_class = DeepSpeedCPUAdam
+    elif args.use_lion:
+        print("Using LION optimizer")
+        optimizer_class = Lion
     else:
         optimizer_class = torch.optim.AdamW
 
     params_to_optimize = (
         itertools.chain(unet.parameters(), text_encoder.parameters()) if args.train_text_encoder else unet.parameters()
     )
-    optimizer = optimizer_class(
-        params_to_optimize,
-        lr=args.learning_rate,
-        betas=(args.adam_beta1, args.adam_beta2),
-        weight_decay=args.adam_weight_decay,
-        eps=args.adam_epsilon,
-    )
+    if args.use_lion == False:
+        optimizer = optimizer_class(
+            params_to_optimize,
+            lr=args.learning_rate,
+            betas=(args.adam_beta1, args.adam_beta2),
+            weight_decay=args.adam_weight_decay,
+            eps=args.adam_epsilon,
+        )
+    else:
+        optimizer = optimizer_class(
+            params_to_optimize,
+            lr=args.learning_rate,
+            betas=(args.adam_beta1, args.adam_beta2),
+            weight_decay=args.adam_weight_decay
+        )
     noise_scheduler = DDPMScheduler(
         beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000, clip_sample=False
     )
