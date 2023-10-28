@@ -100,6 +100,7 @@ register_arg("gradient_accumulation_steps", 1, "int", "Number of updates steps t
 register_arg("gradient_checkpointing", False, "bool", "Whether or not to use gradient checkpointing to save memory at the expense of a slower backwards/update pass.")
 register_arg("scale_lr", False, "bool", "Scale the learning rate by the number of active GPUs, gradient accumulation steps and batch size.")
 register_arg("use_8bit_adam", False, "bool", "Whether or not to use 8-bit Adam from bitsandbytes. Required on NVIDIA cards with 24GBs of VRAM or less for finetuning.")
+register_arg("use_lion", False, "bool", "Whether or not to use the Lion optimiser.")
 register_arg("adam_beta1", 0.9, "float", "The beta1 parameter for the Adam optimiser.")
 register_arg("adam_beta2", 0.999, "float", "The beta2 parameter for the Adam optimiser.")
 register_arg("adam_weight_decay", 1e-2, "float", "Weight decay for the Adam optimiser.")
