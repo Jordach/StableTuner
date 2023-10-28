@@ -19,7 +19,6 @@ from transformers import AutoTokenizer, PretrainedConfig, CLIPTextModel
 EPSILON = 1e-6
 
 # Add noise to latents
-@torch.jit.script
 def get_noisy_latents(batch, noise_scheduler, with_pertubation_noise, perturbation_weight, model_variant):
     with torch.no_grad():
         latent_dist = batch[0][0]
