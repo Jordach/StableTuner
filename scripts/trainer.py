@@ -1906,7 +1906,6 @@ def main():
                 schedule = DPMSolverMultistepScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
                 unwrapped_unet = accelerator.unwrap_model(unet,True)
                 if args.use_ema:
-                    ema_unet.store(unwrapped_unet.parameters())
                     ema_unet.copy_to(unwrapped_unet.parameters())
                     
                 pipeline = DiffusionPipeline.from_pretrained(
