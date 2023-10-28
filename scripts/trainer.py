@@ -1959,8 +1959,8 @@ def main():
                 #get_embeddings = torch.compile(tu.text_encoder_inference, mode="reduce-overhead")
 
         get_unet_noise = tu.predict_unet_noise
-        if args.use_torch_compile:
-            get_unet_noise = torch.compile(tu.predict_unet_noise)
+        #if args.use_torch_compile:
+            # get_unet_noise = torch.compile(tu.predict_unet_noise)
             # get_unet_noise = torch.compile(tu.predict_unet_noise, mode="reduce-overhead")
 
         get_loss = tu.get_batch_loss
