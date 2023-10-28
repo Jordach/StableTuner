@@ -1598,8 +1598,10 @@ def main():
         return batch
     
     if not args.use_latents_only or args.regenerate_latent_cache:
+        
+        print(f"{bcolors.WARNING}PyTorch's dataloader takes a while, so this may appear to be frozen for a very long time.{bcolors.ENDC}") 
         train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=args.train_batch_size, shuffle=False, collate_fn=collate_fn, pin_memory=True, num_workers=6
+            train_dataset, batch_size=args.train_batch_size, shuffle=False, collate_fn=collate_fn, pin_memory=True,
         )
         #get the length of the dataset
         train_dataset_length = len(train_dataset)
@@ -1738,23 +1740,16 @@ def main():
                     cached_extra = None
                     batch["pixel_values"] = batch["pixel_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
                     batch["input_ids"] = batch["input_ids"].to(accelerator.device, non_blocking=True)
-                    if args.model_variant == "inpainting":
-                        batch["extra_values"] = batch["extra_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
-                        cached_conditioning_latent = vae.encode(batch["pixel_values"] * (1 - batch["extra_values"])).latent_dist
-                        cached_extra = functional.resize(batch["extra_values"], size=cached_conditioning_latent.mean.shape[2:])
-                    if args.model_variant == "depth2img":
-                        batch["extra_values"] = batch["extra_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
-                        cached_conditioning_latent = vae.encode(batch["pixel_values"] * (1 - batch["extra_values"])).latent_dist
-                        cached_extra = functional.resize(batch["extra_values"], size=cached_conditioning_latent.mean.shape[2:])
+                    # if args.model_variant == "inpainting":
+                    #     batch["extra_values"] = batch["extra_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
+                    #     cached_conditioning_latent = vae.encode(batch["pixel_values"] * (1 - batch["extra_values"])).latent_dist
+                    #     cached_extra = functional.resize(batch["extra_values"], size=cached_conditioning_latent.mean.shape[2:])
+                    # if args.model_variant == "depth2img":
+                    #     batch["extra_values"] = batch["extra_values"].to(accelerator.device, non_blocking=True, dtype=weight_dtype)
+                    #     cached_conditioning_latent = vae.encode(batch["pixel_values"] * (1 - batch["extra_values"])).latent_dist
+                    #     cached_extra = functional.resize(batch["extra_values"], size=cached_conditioning_latent.mean.shape[2:])
                     cached_latent = vae.encode(batch["pixel_values"]).latent_dist
-                    # cached_latent = [vae.encode(batch["pixel_values"][k]).latent_dist for k in batch["pixel_values"]]
-                    # cached_latent = torch.FloatTensor(cached_latent)
-                    # cached_latent = cached_latent.to(accelerator.device, non_blocking=True, dtype=weight_dtype)
-                    if args.train_text_encoder:
-                        cached_text_enc = batch["input_ids"]
-                    else:
-                        # Insert token processing logic here lad
-                        cached_text_enc = text_encoder(batch["input_ids"])[0]
+                    cached_text_enc = batch["input_ids"]
                     train_dataset.add_latent(cached_latent, cached_text_enc, cached_conditioning_latent, cached_extra, batch["tokens"])
                     del batch
                     del cached_latent
