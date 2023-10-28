@@ -90,10 +90,10 @@ def get_batch_loss(noise_scheduler, latents, noise, timesteps, model_pred, use_m
         loss = loss.mean([1, 2, 3])
         loss = apply_snr_weight_neo(are_we_v_pred, loss.float(), timesteps, noise_scheduler, msnr_gamma, accelerator)
         loss = loss.mean()
-        return loss, target
+        return loss
     else:
         loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
-        return loss, target
+        return loss
 
 # Text encoder inference without gradients:
 def text_encoder_inference(text_enc_context, batch, text_encoder, tokenizer, clip_skip, accelerator, max_standard_tokens, token_chunks_limit):
@@ -249,8 +249,6 @@ def predict_unet_noise(noisy_latents, timesteps, encoder_hidden_states, unet):
     #else: #args.model_variant == "base":
     model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
     return model_pred
-
-# Handle loss for batch
 
 # helper functions
 
