@@ -19,6 +19,7 @@ from transformers import AutoTokenizer, PretrainedConfig, CLIPTextModel
 EPSILON = 1e-6
 
 # Add noise to latents
+@torch.jit.script
 def get_noisy_latents(batch, noise_scheduler, with_pertubation_noise, perturbation_weight, model_variant):
     with torch.no_grad():
         latent_dist = batch[0][0]
@@ -47,6 +48,7 @@ def get_noisy_latents(batch, noise_scheduler, with_pertubation_noise, perturbati
     return timesteps, latents, noisy_latents, noise, bsz
 
 # Get the loss for this batch
+@torch.jit.script
 def get_batch_loss(noise_scheduler, latents, noise, timesteps, model_pred, use_msnr, msnr_gamma, force_v_pred, accelerator):
     if noise_scheduler.config.prediction_type == "epsilon" and not force_v_pred:
         target = noise
@@ -259,6 +261,7 @@ def default(val, d):
     return val if exists(val) else d
 
 # Min SNR related:
+@torch.jit.script
 def apply_snr_weight_neo(is_v_prediction, loss, timesteps, noise_scheduler, gamma, accelerator):
     snr = torch.stack([noise_scheduler.all_snr[t] for t in timesteps])
     min_snr_gamma = torch.minimum(snr, torch.tensor(gamma, dtype=torch.float))
