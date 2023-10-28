@@ -118,7 +118,6 @@ def parse_args():
     parser.add_argument("--max_grad_norm",                 default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument("--use_torch_compile",             default=False, action="store_true", help="Use Torch Compilation to speed up training.")
     parser.add_argument("--use_deepspeed_adam",            default=False, action="store_true", help="Use experimental DeepSpeed Adam 8.")
-    parser.add_argument("--move_te_cpu",                   default=False, action="store_true", help="Whether to move the Text Encoder to the CPU when not being used.")
 
     # Misc Settings
     parser.add_argument("--save_every_n_epoch",            default=1, type=int, help="save on epoch finished")
@@ -1963,9 +1962,6 @@ def main():
         get_unet_noise = tu.predict_unet_noise
         get_loss = tu.get_batch_loss
 
-        if args.move_te_cpu:
-            text_encoder = text_encoder.to("cpu")
-
         for epoch in range(args.num_train_epochs):
             model_outputs = 0
             #every 10 epochs print instructions
@@ -1993,15 +1989,9 @@ def main():
                 with accelerator.accumulate(unet):
                     # Convert images to latent space
                     timesteps, latents, noisy_latents, noise, bsz = get_noisy_latents(batch, noise_scheduler, args.with_pertubation_noise, args.perturbation_noise_weight, args.model_variant)
-                    
-                    if args.move_te_cpu:
-                        text_encoder = text_encoder.to(accelerator.device)
 
                     # Get the text embedding for conditioning
                     encoder_hidden_states = get_embeddings(text_enc_context, batch, text_encoder, tokenizer, args.clip_penultimate, accelerator, max_standard_tokens, token_chunks_limit)
-
-                    if args.move_te_cpu:
-                        text_encoder = text_encoder.to("cpu")
 
                     # Predict the noise residual
                     model_pred = get_unet_noise(noisy_latents, timesteps, encoder_hidden_states, unet)
