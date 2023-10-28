@@ -1938,8 +1938,6 @@ def main():
                         torch.cuda.ipc_collect()
                 if save_model == True:
                     print(f"{bcolors.OKGREEN}Weights saved to {save_dir}{bcolors.ENDC}")
-                if args.use_ema:
-                    ema_unet.restore(unwrapped_unet.parameters())
         except Exception as e:
             print(e)
             print(f"{bcolors.FAIL} Error occured during sampling, skipping.{bcolors.ENDC}")
