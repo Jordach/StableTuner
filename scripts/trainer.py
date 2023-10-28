@@ -1599,7 +1599,7 @@ def main():
     
     if not args.use_latents_only or args.regenerate_latent_cache:
         train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=args.train_batch_size, shuffle=False, collate_fn=collate_fn, pin_memory=True
+            train_dataset, batch_size=args.train_batch_size, shuffle=False, collate_fn=collate_fn, pin_memory=True, num_workers=6
         )
         #get the length of the dataset
         train_dataset_length = len(train_dataset)
@@ -1944,27 +1944,14 @@ def main():
 
         
         get_noisy_latents = tu.get_noisy_latents
-        if args.use_torch_compile:
-            get_noisy_latents = torch.compile(tu.get_noisy_latents, mode="reduce-overhead")
-
         get_embeddings = ""
         if args.train_text_encoder:
             get_embeddings = tu.text_encoder_training
-            #if args.use_torch_compile:
-                #get_embeddings = torch.compile(tu.text_encoder_training, mode="reduce-overhead")
         else:
             get_embeddings = tu.text_encoder_inference
-            #if args.use_torch_compile:
-                #get_embeddings = torch.compile(tu.text_encoder_inference, mode="reduce-overhead")
 
         get_unet_noise = tu.predict_unet_noise
-        #if args.use_torch_compile:
-            # get_unet_noise = torch.compile(tu.predict_unet_noise)
-            # get_unet_noise = torch.compile(tu.predict_unet_noise, mode="reduce-overhead")
-
         get_loss = tu.get_batch_loss
-        if args.use_torch_compile:
-            get_loss = torch.compile(tu.get_batch_loss, mode="reduce-overhead")
 
         for epoch in range(args.num_train_epochs):
             model_outputs = 0
@@ -1992,21 +1979,15 @@ def main():
             for step, batch in enumerate(train_dataloader):
                 with accelerator.accumulate(unet):
                     # Convert images to latent space
-                    # in: batch, noise_scheduler, with_pertubation_noise, perturbation_weight, model_variant
-                    # out: latents, noisy_latents, timesteps, bsz
                     timesteps, latents, noisy_latents, noise, bsz = get_noisy_latents(batch, noise_scheduler, args.with_pertubation_noise, args.perturbation_noise_weight, args.model_variant)
 
                     # Get the text embedding for conditioning
-                    # batch, text_encoder, tokenizer, clip_skip, accel_device, max_tokens, token_chunk_limit, 
                     encoder_hidden_states = get_embeddings(text_enc_context, batch, text_encoder, tokenizer, args.clip_penultimate, accelerator, max_standard_tokens, token_chunks_limit)
 
                     # Predict the noise residual
-                    # in: noisy_latents, timesteps, encoder_hidden_states
                     model_pred = get_unet_noise(noisy_latents, timesteps, encoder_hidden_states, unet)
                     
                     # Get the target for loss depending on the prediction type
-                    # in: noise_scheduler, latents, noise, timesteps, model_pred, use_zsnr, msnr_gamma, force_v_pred, 
-                    # out: loss
                     loss = get_loss(noise_scheduler, latents, noise, timesteps, model_pred, args.zero_terminal_snr, args.min_snr_gamma, args.force_v_pred, accelerator)
                     
                     #if args.model_variant == "inpainting":
