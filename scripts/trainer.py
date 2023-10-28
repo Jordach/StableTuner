@@ -117,7 +117,6 @@ def parse_args():
     parser.add_argument("--adam_epsilon",                  default=1e-08, type=float, help="Epsilon value for the Adam optimizer")
     parser.add_argument("--max_grad_norm",                 default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument("--use_deepspeed_adam",            default=False, action="store_true", help="Use experimental DeepSpeed Adam 8.")
-    parser.add_argument("--training_workers",              default=1, type=int, help="How many PyTorch threads should be used while training.")
     parser.add_argument("--training_prefetch",             default=2, type=int, help="How many batches should PyTorch preload while training.")
     parser.add_argument("--dataset_workers",               default=1, type=int, help="How many PyTorch threads should be used while preparing the dataset for latent caching.")
     parser.add_argument("--dataset_prefetch",              default=2, type=int, help="How many batches should PyTorch preload while preparing the dataset for latent caching.")
@@ -1812,7 +1811,7 @@ def main():
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
         #load all the cached latents into a single dataset
-    train_dataloader = torch.utils.data.DataLoader(cached_dataset, batch_size=1, collate_fn=lambda x: x, shuffle=False, prefetch_factor=args.training_prefetch, num_workers=args.training_workers)
+    train_dataloader = torch.utils.data.DataLoader(cached_dataset, batch_size=1, collate_fn=lambda x: x, shuffle=False, prefetch_factor=args.training_prefetch)
     print(f"{bcolors.OKGREEN}Latents are ready.{bcolors.ENDC}")
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
