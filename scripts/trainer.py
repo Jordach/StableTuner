@@ -114,6 +114,7 @@ def parse_args():
     parser.add_argument("--adam_weight_decay",             default=1e-2, type=float, help="Weight decay to use.")
     parser.add_argument("--adam_epsilon",                  default=1e-08, type=float, help="Epsilon value for the Adam optimizer")
     parser.add_argument("--max_grad_norm",                 default=1.0, type=float, help="Max gradient norm.")
+    parser.add_argument("--use_torch_compile",             default=False, action="store_true", help="Use Torch Compilation to speed up training.")
     parser.add_argument("--use_deepspeed_adam",            default=False, action="store_true", help="Use experimental DeepSpeed Adam 8.")
 
     # Misc Settings
@@ -1832,12 +1833,12 @@ def main():
     logger.info("***** Running training *****")
     if not args.use_latents_only:
         logger.info(f"  Num examples = {len(train_dataset)}")
-    logger.info(f"  Num batches each epoch = {len(train_dataloader)}")
-    logger.info(f"  Num Epochs = {args.num_train_epochs}")
-    logger.info(f"  Instantaneous batch size per device = {args.train_batch_size}")
-    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
-    logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
-    logger.info(f"  Total optimization steps = {args.max_train_steps}")
+    logger.info(f"Num batches each epoch = {len(train_dataloader)}")
+    logger.info(f"Num Epochs = {args.num_train_epochs}")
+    logger.info(f"Instantaneous batch size per device = {args.train_batch_size}")
+    logger.info(f"Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+    logger.info(f"Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+    logger.info(f"Total optimization steps = {args.max_train_steps}")
     def save_and_sample_weights(step,context='checkpoint',save_model=True):
         try:
             #check how many folders are in the output dir
@@ -1941,6 +1942,29 @@ def main():
         if token_chunks_limit < 1:
             token_chunks_limit = 1
 
+        
+        get_noisy_latents = tu.get_noisy_latents
+        if args.use_torch_compile:
+            get_noisy_latents = torch.compile(tu.get_noisy_latents)
+
+        get_embeddings = ""
+        if args.train_text_encoder:
+            get_embeddings = tu.text_encoder_training
+            if args.use_torch_compile:
+                get_embeddings = torch.compile(tu.text_encoder_training)
+        else:
+            get_embeddings = tu.text_encoder_inference
+            if args.use_torch_compile:
+                get_embeddings = torch.compile(tu.text_encoder_inference)
+
+        get_unet_noise = tu.predict_unet_noise
+        if args.use_torch_compile:
+            get_unet_noise = torch.compile(tu.predict_unet_noise)
+
+        get_loss = tu.get_batch_loss
+        if args.use_torch_compile:
+            get_loss = torch.compile(tu.get_batch_loss)
+
         for epoch in range(args.num_train_epochs):
             model_outputs = 0
             #every 10 epochs print instructions
@@ -1967,166 +1991,27 @@ def main():
             for step, batch in enumerate(train_dataloader):
                 with accelerator.accumulate(unet):
                     # Convert images to latent space
-                    with torch.no_grad():
-                        latent_dist = batch[0][0]
-                        latents = latent_dist.sample() * 0.18215
-                        if args.model_variant == 'inpainting':
-                            conditioning_latent_dist = batch[0][2]
-                            mask = batch[0][3]
-                            conditioning_latents = conditioning_latent_dist.sample() * 0.18215
-                        if args.model_variant == 'depth2img':
-                            depth = batch[0][3]
-                    # Sample noise that we'll add to the latents
-                    noise = torch.randn_like(latents)
-                    bsz = latents.shape[0]
-                    # Sample a random timestep for each image
-                    timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
-                    timesteps = timesteps.long()
+                    # in: batch, noise_scheduler, with_pertubation_noise, perturbation_weight, model_variant
+                    # out: latents, noisy_latents, timesteps, bsz
+                    timesteps, latents, noisy_latents, noise, bsz = get_noisy_latents(batch, noise_scheduler, args.with_pertubation_noise, args.perturbation_noise_weight, args.model_variant)
 
-                    if args.with_pertubation_noise:
-                        # https://arxiv.org/pdf/2301.11706.pdf
-                        noisy_latents = noise_scheduler.add_noise(latents, noise + args.perturbation_noise_weight * torch.randn_like(latents), timesteps)
-                    else:
-                        # Add noise to the latents according to the noise magnitude at each timestep
-                        # (this is the forward diffusion process)
-                        noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps, device=latents.device)
-
-                    # TODO MOVE ME TO A FUNCTION
                     # Get the text embedding for conditioning
-                    with text_enc_context:
-                        tru_len = max(len(x) for x in batch[0][1])
-                        max_chunks = np.ceil(tru_len / max_standard_tokens).astype(int)
-                        max_len = max_chunks.item() * max_standard_tokens
-                        clamp_event = False
-                        #print(f"\n\n\nC:{max_chunks}, L:{max_len}, T:{tru_len}")
-                        # If we're a properly padded bunch of tokens that have come from the tokeniser padder, train normally;
-                        # otherwise we're handling a dropout batch, and thusly need to handle it the normal way. 
-                        if tru_len == max_len and max_chunks > 1:
-                            # Duplicate batch tensor to prevent irreparably damaging it's token data
-                            # Recommended over torch.tensor()
-                            n_batch = batch[0][1].clone().detach()
-                            z = None
-                            for i, x in enumerate(n_batch):
-                                if len(x) < max_len:
-                                    n_batch[i] = [*x, *np.full((max_len - len(x)), tokenizer.eos_token_id)]
-                                del i
-                                del x
-
-                            chunks = [n_batch[:, i:i + max_standard_tokens] for i in range(0, max_len, max_standard_tokens)]
-                            clamp_chunk = 0
-                            for chunk in chunks:
-                                # Hard limit the tokens to fit in memory for the rare event that latent caches that somehow exceed the limit.
-                                if clamp_chunk > (token_chunks_limit):
-                                    #print("\nWARNING: Clamped abnormal amount of tokens.\n")
-                                    del chunk
-                                    break
-
-                                chunk = chunk.to(accelerator.device)
-                                chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1)
-                                if z is None:
-                                    if args.clip_penultimate:
-                                        encode = text_encoder(chunk, output_hidden_states=True)
-                                        z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
-                                        del encode
-                                    else:
-                                        encode = text_encoder(chunk)[0]
-                                        z = encode
-                                        del encode
-                                else:
-                                    if args.clip_penultimate:
-                                        encode = text_encoder(chunk, output_hidden_states=True)
-                                        z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
-                                        del encode
-                                    else:
-                                        encode = text_encoder(chunk)[0]
-                                        z = torch.cat((z, encode), dim=-2)
-                                        del encode
-
-                                clamp_chunk += 1
-                                del chunk
-                            encoder_hidden_states = torch.stack(tuple(z))
-                            del n_batch
-                            del tru_len
-                            del max_chunks
-                            del max_len
-                            del z
-                            del chunks
-                            del clamp_chunk
-                        else:
-                            if args.clip_penultimate == True:
-                                encoder_hidden_states = text_encoder(batch[0][1],output_hidden_states=True)
-                                encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
-                            else:
-                                encoder_hidden_states = text_encoder(batch[0][1])[0]
-
-                        del clamp_event
+                    # batch, text_encoder, tokenizer, clip_skip, accel_device, max_tokens, token_chunk_limit, 
+                    encoder_hidden_states = get_embeddings(text_enc_context, batch, text_encoder, tokenizer, args.clip_penultimate, accelerator, max_standard_tokens, token_chunks_limit)
 
                     # Predict the noise residual
-                    if args.model_variant == 'inpainting':
-                        if random.uniform(0, 1) < 0.25:
-                            # for some steps, predict the unmasked image
-                            conditioning_latents = torch.stack([extra_latent[tuple([latents.shape[3]*8, latents.shape[2]*8])].squeeze()] * bsz)
-                            mask = torch.ones(bsz, 1, latents.shape[2], latents.shape[3]).to(accelerator.device, dtype=weight_dtype)
-
-                        noisy_inpaint_latents = torch.concat([noisy_latents, mask, conditioning_latents], 1)
-                        model_pred = unet(noisy_inpaint_latents, timesteps, encoder_hidden_states).sample
-                    elif args.model_variant == 'depth2img':
-                        noisy_latents = torch.cat([noisy_latents, depth], dim=1)
-                        model_pred = unet(noisy_latents, timesteps, encoder_hidden_states, depth).sample
-                    else: #args.model_variant == "base":
-                        model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
+                    # in: noisy_latents, timesteps, encoder_hidden_states
+                    model_pred = get_unet_noise(noisy_latents, timesteps, encoder_hidden_states, unet)
                     
-
                     # Get the target for loss depending on the prediction type
-                    if noise_scheduler.config.prediction_type == "epsilon" and not args.force_v_pred:
-                        target = noise
-                    elif noise_scheduler.config.prediction_type == "v_prediction" or args.force_v_pred:
-                        target = noise_scheduler.get_velocity(latents, noise, timesteps)
-                    else:
-                        raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
-
-                    if args.with_prior_preservation:
-                        # Chunk the noise and noise_pred into two parts and compute the loss on each part separately.
-                        """
-                        noise_pred, noise_pred_prior = torch.chunk(noise_pred, 2, dim=0)
-                        noise, noise_prior = torch.chunk(noise, 2, dim=0)
-
-                        # Compute instance loss
-                        loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="none").mean([1, 2, 3]).mean()
-
-                        # Compute prior loss
-                        prior_loss = F.mse_loss(noise_pred_prior.float(), noise_prior.float(), reduction="mean")
-
-                        # Add the prior loss to the instance loss.
-                        loss = loss + args.prior_loss_weight * prior_loss
-                        """
-                        # Chunk the noise and model_pred into two parts and compute the loss on each part separately.
-                        model_pred, model_pred_prior = torch.chunk(model_pred, 2, dim=0)
-                        target, target_prior = torch.chunk(target, 2, dim=0)
-                        loss = F.mse_loss(model_pred.float(), target.float(), reduction="none").mean([1, 2, 3]).mean()
-                        prior_loss = F.mse_loss(model_pred_prior.float(), target_prior.float(), reduction="mean")
-                    else:
-                        if args.min_snr_gamma:
-                            if args.min_snr_gamma == None:
-                                args.min_snr_gamma = 5
-
-                            are_we_v_pred = False
-                            if args.force_v_pred:
-                                are_we_v_pred = True
-                            elif noise_scheduler.config.prediction_type == "v_prediction":
-                                are_we_v_pred = True
-
-                            loss = (target.float() - model_pred.float()) ** 2
-                            loss = loss.mean([1, 2, 3])
-                            loss = tu.apply_snr_weight_neo(are_we_v_pred, loss.float(), timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
-                            loss = loss.mean()
-                        else:
-                            loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
-
-                    if args.model_variant == "inpainting":
-                        del timesteps, noise, latents, noisy_latents,noisy_inpaint_latents, encoder_hidden_states
-                    else: #args.model_variant == "base":
-                        del timesteps, noise, latents, noisy_latents, encoder_hidden_states
+                    # in: noise_scheduler, latents, noise, timesteps, model_pred, use_zsnr, msnr_gamma, force_v_pred, 
+                    # out: loss
+                    loss = get_loss(noise_scheduler, latents, noise, timesteps, model_pred, args.zero_terminal_snr, args.min_snr_gamma, args.force_v_pred, accelerator)
+                    
+                    #if args.model_variant == "inpainting":
+                        #del timesteps, noise, latents, noisy_latents, noisy_inpaint_latents, encoder_hidden_states
+                    #else: #args.model_variant == "base":
+                    del timesteps, noise, latents, noisy_latents, encoder_hidden_states
 
                     accelerator.backward(loss)
                     if accelerator.sync_gradients:
