@@ -1573,8 +1573,12 @@ def main():
     
     if not args.use_latents_only or args.regenerate_latent_cache:
         train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=args.train_batch_size, shuffle=False, collate_fn=collate_fn, pin_memory=True, prefetch_factor=args.dataset_prefetch, num_workers=args.dataset_workers
+            train_dataset, batch_size=args.train_batch_size, shuffle=False, collate_fn=collate_fn, pin_memory=True
         )
+        if args.dataset_workers != -1:
+            train_dataloader = torch.utils.data.DataLoader(
+                train_dataset, batch_size=args.train_batch_size, shuffle=False, collate_fn=collate_fn, pin_memory=True, prefetch_factor=args.dataset_prefetch, num_workers=args.dataset_workers
+            )
         #get the length of the dataset
         train_dataset_length = len(train_dataset)
         #code to check if latent cache needs to be resaved
