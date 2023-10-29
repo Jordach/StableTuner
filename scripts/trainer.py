@@ -689,7 +689,7 @@ class DataLoaderMultiAspect():
         self.seed = seed
         self.model_variant = model_variant
         self.extra_module = extra_module
-        prepared_train_data = []
+        self.prepared_train_data = []
         
         self.aspects = get_aspect_buckets(resolution)
         #print(f"* DLMA resolution {resolution}, buckets: {self.aspects}")
@@ -697,24 +697,6 @@ class DataLoaderMultiAspect():
             
         print(f"{bcolors.WARNING} Preloading images...{bcolors.ENDC}")   
 
-        if balance_datasets:
-            print(f"{bcolors.WARNING} Balancing datasets...{bcolors.ENDC}") 
-            #get the concept with the least number of images in instance_data_dir
-            min_concept = min(concept_list, key=lambda x: len(os.listdir(x['instance_data_dir'])))
-            #get the number of images in the concept with the least number of images
-            min_concept_num_images = len(os.listdir(min_concept['instance_data_dir']))
-            print(" Min concept: ",min_concept['instance_data_dir']," with ",min_concept_num_images," images")
-            
-            balance_cocnept_list = []
-            for concept in concept_list:
-                #if concept has a key do not balance it
-                if 'do_not_balance' in concept:
-                    if concept['do_not_balance'] == True:
-                        balance_cocnept_list.append(-1)
-                    else:
-                        balance_cocnept_list.append(min_concept_num_images)
-                else:
-                        balance_cocnept_list.append(min_concept_num_images)
         for concept in concept_list:
             if 'use_sub_dirs' in concept:
                 if concept['use_sub_dirs'] == True:
@@ -726,52 +708,23 @@ class DataLoaderMultiAspect():
             self.image_paths = []
             #self.class_image_paths = []
             min_concept_num_images = None
-            if balance_datasets:
-                min_concept_num_images = balance_cocnept_list[concept_list.index(concept)]
             data_root = concept['instance_data_dir']
-            data_root_class = concept['class_data_dir']
             concept_prompt = concept['instance_prompt']
-            concept_class_prompt = concept['class_prompt']
+            data_root_class = ""
+            concept_class_prompt = ""
             if 'flip_p' in concept.keys():
                 flip_p = concept['flip_p']
                 if flip_p == '':
                     flip_p = 0.0
                 else:
                     flip_p = float(flip_p)
+            self.flip_p = flip_p
+
+            self.concept_prompt = concept_prompt
             self.__recurse_data_root(self=self, recurse_root=data_root,use_sub_dirs=use_sub_dirs)
             random.Random(self.seed).shuffle(self.image_paths)
-            if self.model_variant == 'depth2img':
-                print(f"{bcolors.WARNING} ** Loading Depth2Img Pipeline To Process Dataset{bcolors.ENDC}")
-                self.vae_scale_factor = self.extra_module.depth_images(self.image_paths)
-            prepared_train_data.extend(self.__prescan_images(debug_level, self.image_paths, flip_p,use_image_names_as_captions,concept_prompt,use_text_files_as_captions=self.use_text_files_as_captions)[0:min_concept_num_images]) # ImageTrainItem[]
-            if add_class_images_to_dataset:
-                self.image_paths = []
-                self.__recurse_data_root(self=self, recurse_root=data_root_class,use_sub_dirs=use_sub_dirs)
-                random.Random(self.seed).shuffle(self.image_paths)
-                use_image_names_as_captions = False
-                prepared_train_data.extend(self.__prescan_images(debug_level, self.image_paths, flip_p,use_image_names_as_captions,concept_class_prompt,use_text_files_as_captions=self.use_text_files_as_captions)) # ImageTrainItem[]
             
-        self.image_caption_pairs = self.__bucketize_images(prepared_train_data, batch_size=batch_size, debug_level=debug_level,aspect_mode=self.aspect_mode,action_preference=self.action_preference)
-        if self.with_prior_loss and add_class_images_to_dataset == False:
-            self.class_image_caption_pairs = []
-            for concept in concept_list:
-                self.class_images_path = []
-                data_root_class = concept['class_data_dir']
-                concept_class_prompt = concept['class_prompt']
-                self.__recurse_data_root(self=self, recurse_root=data_root_class,use_sub_dirs=use_sub_dirs,class_images=True)
-                random.Random(seed).shuffle(self.image_paths)
-                if self.model_variant == 'depth2img':
-                    print(f"{bcolors.WARNING} ** Depth2Img To Process Class Dataset{bcolors.ENDC}")
-                    self.vae_scale_factor = self.extra_module.depth_images(self.image_paths)
-                use_image_names_as_captions = False
-                self.class_image_caption_pairs.extend(self.__prescan_images(debug_level, self.class_images_path, flip_p,use_image_names_as_captions,concept_class_prompt,use_text_files_as_captions=self.use_text_files_as_captions))
-            self.class_image_caption_pairs = self.__bucketize_images(self.class_image_caption_pairs, batch_size=batch_size, debug_level=debug_level,aspect_mode=self.aspect_mode,action_preference=self.action_preference)
-        if self.model_variant == "inpainting" and mask_prompts is not None:
-            print(f"{bcolors.WARNING} Checking and generating missing masks...{bcolors.ENDC}")
-            clip_seg = ClipSeg()
-            clip_seg.mask_images(self.image_paths, mask_prompts)
-            del clip_seg
-        if debug_level > 0: print(f" * DLMA Example: {self.image_caption_pairs[0]} images")
+        self.image_caption_pairs = self.__bucketize_images(self.prepared_train_data, batch_size=batch_size, debug_level=debug_level,aspect_mode=self.aspect_mode,action_preference=self.action_preference)
         #print the length of image_caption_pairs
         print(f"{bcolors.WARNING} Number of image-caption pairs: {len(self.image_caption_pairs)}{bcolors.ENDC}") 
         if len(self.image_caption_pairs) == 0:
@@ -781,44 +734,6 @@ class DataLoaderMultiAspect():
             return self.image_caption_pairs
         else:
             return self.image_caption_pairs, self.class_image_caption_pairs
-    def __prescan_images(self,debug_level: int, image_paths: list, flip_p=0.0,use_image_names_as_captions=True,concept=None,use_text_files_as_captions=False):
-        """
-        Create ImageTrainItem objects with metadata for hydration later 
-        """
-        decorated_image_train_items = []
-        
-        for pathname in tqdm(image_paths, desc="Scanning Images"):
-            identifier = concept 
-            if use_image_names_as_captions:
-                caption_from_filename = os.path.splitext(os.path.basename(pathname))[0].split("_")[0]
-                identifier = caption_from_filename
-            if use_text_files_as_captions:
-                txt_file_path = os.path.splitext(pathname)[0] + ".txt"
-
-                if os.path.exists(txt_file_path):
-                    try:
-                        with open(txt_file_path, 'r',encoding='utf-8',errors='ignore') as f:
-                            identifier = f.readline().rstrip()
-                            f.close()
-                            if len(identifier) < 1:
-                                raise ValueError(f" *** Could not find valid text in: {txt_file_path}")
-                            
-                    except Exception as e:
-                        print(f"{bcolors.FAIL} *** Error reading {txt_file_path} to get caption, falling back to filename{bcolors.ENDC}") 
-                        print(e)
-                        identifier = caption_from_filename
-                        pass
-            #print("identifier: ",identifier)
-            image = Image.open(pathname)
-            width, height = image.size
-            image_aspect = width / height
-
-            target_wh = min(self.aspects, key=lambda aspects:abs(aspects[0]/aspects[1] - image_aspect))
-
-            image_train_item = ImageTrainItem(image=None, extra=None, caption=identifier, target_wh=target_wh, pathname=pathname, flip_p=flip_p,model_variant=self.model_variant)
-
-            decorated_image_train_items.append(image_train_item)
-        return decorated_image_train_items
 
     @staticmethod
     def __bucketize_images(prepared_train_data: list, batch_size=1, debug_level=0,aspect_mode='dynamic',action_preference='add'):
@@ -916,19 +831,41 @@ class DataLoaderMultiAspect():
         return image_caption_pairs
 
     @staticmethod
-    def __recurse_data_root(self, recurse_root,use_sub_dirs=True,class_images=False):
+    def __recurse_data_root(self, recurse_root,use_sub_dirs=True,class_images=False,concept=None):
         progress_bar = tqdm(os.listdir(recurse_root), desc=f"{bcolors.WARNING} ** Processing {recurse_root}{bcolors.ENDC}")
         for f in os.listdir(recurse_root):
             current = os.path.join(recurse_root, f)
             if os.path.isfile(current):
                 ext = os.path.splitext(f)[1].lower()
-                if '-depth' in f or '-masklabel' in f:
-                    progress_bar.update(1)
-                    continue
                 if ext in ['.jpg', '.jpeg', '.png', '.bmp', '.webp']:
                     #try to open the file to make sure it's a valid image
                     try:
                         img = Image.open(current)
+
+                        identifier = self.concept_prompt
+                        if self.use_image_names_as_captions:
+                            caption_from_filename = os.path.splitext(os.path.basename(f))[0].split("_")[0]
+                            identifier = caption_from_filename
+                        if self.use_text_files_as_captions:
+                            txt_file_path = os.path.splitext(f)[0] + ".txt"
+                            if os.path.exists(txt_file_path):
+                                try:
+                                    with open(txt_file_path, 'r',encoding='utf-8',errors='ignore') as txt:
+                                        identifier = txt.readline().strip()
+                                        txt.close()
+                                        if len(identifier) < 1:
+                                            raise ValueError(f" *** Could not find valid text in: {txt_file_path}")
+                                except Exception as e:
+                                    print(f"{bcolors.FAIL} *** Error reading {txt_file_path} to get caption, falling back to filename{bcolors.ENDC}") 
+                                    print(e)
+                                    identifier = caption_from_filename
+                        
+                        width, height = img.size
+                        image_aspect = width / height
+                        target_wh = min(self.aspects, key=lambda aspects:abs(aspects[0]/aspects[1] - image_aspect))
+
+                        image_train_item = ImageTrainItem(image=None, extra=None, caption=identifier, target_wh=target_wh, pathname=f, flip_p=self.flip_p,model_variant=self.model_variant)
+                        self.prepared_train_data.append(image_train_item)
                     except:
                         print(f" ** Skipping {current} because it failed to open, please check the file")
                         progress_bar.update(1)
