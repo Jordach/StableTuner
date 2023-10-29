@@ -844,10 +844,10 @@ class DataLoaderMultiAspect():
 
                         identifier = self.concept_prompt
                         if self.use_image_names_as_captions:
-                            caption_from_filename = os.path.splitext(os.path.basename(f))[0].split("_")[0]
+                            caption_from_filename = os.path.splitext(os.path.basename(current))[0].split("_")[0]
                             identifier = caption_from_filename
                         if self.use_text_files_as_captions:
-                            txt_file_path = os.path.splitext(f)[0] + ".txt"
+                            txt_file_path = os.path.splitext(current)[0] + ".txt"
                             if os.path.exists(txt_file_path):
                                 try:
                                     with open(txt_file_path, 'r',encoding='utf-8',errors='ignore') as txt:
@@ -864,7 +864,7 @@ class DataLoaderMultiAspect():
                         image_aspect = width / height
                         target_wh = min(self.aspects, key=lambda aspects:abs(aspects[0]/aspects[1] - image_aspect))
 
-                        image_train_item = ImageTrainItem(image=None, extra=None, caption=identifier, target_wh=target_wh, pathname=f, flip_p=self.flip_p,model_variant=self.model_variant)
+                        image_train_item = ImageTrainItem(image=None, extra=None, caption=identifier, target_wh=target_wh, pathname=current, flip_p=self.flip_p,model_variant=self.model_variant)
                         self.prepared_train_data.append(image_train_item)
                     except:
                         print(f" ** Skipping {current} because it failed to open, please check the file")
