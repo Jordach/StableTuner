@@ -743,7 +743,7 @@ class DataLoaderMultiAspect():
 
         # TODO: this is not terribly efficient but at least linear time
         buckets = {}
-        for image_caption_pair in tqdm(prepared_train_data, desc="Preparing buckets"):
+        for image_caption_pair in prepared_train_data:
             target_wh = image_caption_pair.target_wh
 
             if (target_wh[0],target_wh[1]) not in buckets:
