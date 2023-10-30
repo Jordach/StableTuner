@@ -1947,20 +1947,117 @@ def main():
             for step, batch in enumerate(train_dataloader):
                 with accelerator.accumulate(unet):
                     # Convert images to latent space
-                    timesteps, latents, noisy_latents, noise, bsz = get_noisy_latents(batch, noise_scheduler, args.with_pertubation_noise, args.perturbation_noise_weight, args.model_variant)
+                    with torch.no_grad():
+                        latent_dist = batch[0][0]
+                        latents = latent_dist.sample() * 0.18215
+
+                    # Sample noise that we'll add to the latents
+                    noise = torch.randn_like(latents)
+                    bsz = latents.shape[0]
+                    # Sample a random timestep for each image
+                    timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
+                    timesteps = timesteps.long()
+
+                    if args.with_pertubation_noise:
+                        # https://arxiv.org/pdf/2301.11706.pdf
+                        noisy_latents = noise_scheduler.add_noise(latents, noise + args.perturbation_noise_weight * torch.randn_like(latents), timesteps)
+                    else:
+                        # Add noise to the latents according to the noise magnitude at each timestep
+                        # (this is the forward diffusion process)
+                        noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps, device=latents.device)
 
                     # Get the text embedding for conditioning
-                    encoder_hidden_states = get_embeddings(text_enc_context, batch, text_encoder, tokenizer, args.clip_penultimate, accelerator, max_standard_tokens, token_chunks_limit)
+                    with text_enc_context:
+                        tru_len = max(len(x) for x in batch[0][1])
+                        max_chunks = np.ceil(tru_len / max_standard_tokens).astype(int)
+                        max_len = max_chunks.item() * max_standard_tokens
+                        clamp_event = False
+                        #print(f"\n\n\nC:{max_chunks}, L:{max_len}, T:{tru_len}")
+                        # If we're a properly padded bunch of tokens that have come from the tokeniser padder, train normally;
+                        # otherwise we're handling a dropout batch, and thusly need to handle it the normal way. 
+                        if tru_len == max_len and max_chunks > 1:
+                            # Duplicate batch tensor to prevent irreparably damaging it's token data
+                            # Recommended over torch.tensor()
+                            n_batch = batch[0][1].clone().detach()
+                            z = None
+                            for i, x in enumerate(n_batch):
+                                if len(x) < max_len:
+                                    n_batch[i] = [*x, *np.full((max_len - len(x)), tokenizer.eos_token_id)]
+                                del i
+                                del x
+
+                            chunks = [n_batch[:, i:i + max_standard_tokens] for i in range(0, max_len, max_standard_tokens)]
+                            clamp_chunk = 0
+                            for chunk in chunks:
+                                # Hard limit the tokens to fit in memory for the rare event that latent caches that somehow exceed the limit.
+                                if clamp_chunk > (token_chunks_limit):
+                                    del chunk
+                                    break
+
+                                chunk = chunk.to(accelerator.device)
+                                chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1)
+                                if z is None:
+                                    if args.clip_penultimate:
+                                        encode = text_encoder(chunk, output_hidden_states=True)
+                                        z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
+                                        del encode
+                                    else:
+                                        encode = text_encoder(chunk, output_hidden_states=True)
+                                        z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])
+                                        del encode
+                                else:
+                                    if args.clip_penultimate:
+                                        encode = text_encoder(chunk, output_hidden_states=True)
+                                        z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
+                                        del encode
+                                    else:
+                                        encode = text_encoder(chunk, output_hidden_states=True)
+                                        z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])), dim=-2)
+                                        del encode
+
+                                clamp_chunk += 1
+                                del chunk
+                            encoder_hidden_states = torch.stack(tuple(z))
+                            del n_batch
+                            del tru_len
+                            del max_chunks
+                            del max_len
+                            del z
+                            del chunks
+                            del clamp_chunk
+                            del clamp_event
+                        else:
+                            if args.clip_penultimate == True:
+                                encoder_hidden_states = text_encoder(batch[0][1],output_hidden_states=True)
+                                encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
+                            else:
+                                encoder_hidden_states = text_encoder(batch[0][1])[0]
 
                     # Predict the noise residual
-                    model_pred = get_unet_noise(noisy_latents, timesteps, encoder_hidden_states, unet)
+                    model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
                     
                     # Get the target for loss depending on the prediction type
-                    loss = get_loss(noise_scheduler, latents, noise, timesteps, model_pred, args.zero_terminal_snr, args.min_snr_gamma, args.force_v_pred, accelerator)
+                    if noise_scheduler.config.prediction_type == "epsilon" and not args.force_v_pred:
+                        target = noise
+                    elif noise_scheduler.config.prediction_type == "v_prediction" or args.force_v_pred:
+                        target = noise_scheduler.get_velocity(latents, noise, timesteps)
+                    else:
+                        raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
+
+                    if args.min_snr_gamma:
+                        are_we_v_pred = False
+                        if args.force_v_pred:
+                            are_we_v_pred = True
+                        elif noise_scheduler.config.prediction_type == "v_prediction":
+                            are_we_v_pred = True
+
+                        loss = (target.float() - model_pred.float()) ** 2
+                        loss = loss.mean([1, 2, 3])
+                        loss = tu.apply_snr_weight_neo(are_we_v_pred, loss.float(), timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
+                        loss = loss.mean()
+                    else:
+                        loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
                     
-                    #if args.model_variant == "inpainting":
-                        #del timesteps, noise, latents, noisy_latents, noisy_inpaint_latents, encoder_hidden_states
-                    #else: #args.model_variant == "base":
                     del timesteps, noise, latents, noisy_latents, encoder_hidden_states
 
                     accelerator.backward(loss)
