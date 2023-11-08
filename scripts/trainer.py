@@ -1923,7 +1923,6 @@ def main():
 
         for epoch in range(args.num_train_epochs):
             model_outputs = 0
-            #every 10 epochs print instructions
             unet.train()
             if args.train_text_encoder:
                 text_encoder.train()

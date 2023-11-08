@@ -45,7 +45,7 @@ import model_util
 
 class Convert_SD_to_Diffusers():
 
-    def __init__(self, checkpoint_path, output_path, prediction_type=None, img_size=None, original_config_file=None, extract_ema=False, num_in_channels=None,pipeline_type=None,scheduler_type=None,sd_version=None,half=None,version=None):
+    def __init__(self, checkpoint_path, output_path, prediction_type=None, img_size=None, original_config_file=None, extract_ema=False, num_in_channels=None,pipeline_type=None,scheduler_type=None,sd_version="v1",half=None,version=None):
         self.checkpoint_path = checkpoint_path
         self.output_path = output_path
         self.prediction_type = prediction_type
