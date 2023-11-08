@@ -70,6 +70,8 @@ class Convert_SD_to_Diffusers():
         pipeline_type = self.pipeline_type
         extract_ema = self.extract_ema
         reference_diffusers_model = None
+        is_v1 = False
+        is_v2 = False
         if self.version == 'v1':
             is_v1 = True
             is_v2 = False
