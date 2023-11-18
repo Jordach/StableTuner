@@ -323,7 +323,7 @@ if are_we_constant_cosine:
 		elif not st_settings["use_latents_only"]:
 			st_settings["use_latents_only"] = True
 			print("Running from latent cache only.")
-		if "disable_text_encoder_after" not in st_settings:
+		if "disable_text_encoder_after" in st_settings:
 			if e+1 == st_settings["disable_text_encoder_after"] and st_settings["train_text_encoder"]:
 				st_settings["train_text_encoder"] = False
 				print("Disabling text encoder training.")
