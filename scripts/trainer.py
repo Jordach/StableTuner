@@ -1460,6 +1460,9 @@ def main():
         noise_scheduler.betas = tu.enforce_zero_terminal_snr(noise_scheduler.betas)
         tu.prepare_scheduler_for_custom_training(noise_scheduler, accelerator.device)
 
+    if args.with_pertubation_noise:
+        print(f"{bcolors.WARNING}Perturbation Noise set to {args.perturbation_noise_weight}.{bcolors.ENDC}")
+
     if args.use_latents_only:
         print(f"{bcolors.WARNING}Notice: Running from latent cache only!.{bcolors.ENDC}")
     elif not args.use_latents_only or args.regenerate_latent_cache:
