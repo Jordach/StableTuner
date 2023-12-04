@@ -63,7 +63,7 @@ register_arg("token_limit", 75, "int", "Token limit, token lengths longer than t
 register_arg("epoch_seed", False, "bool", "Increments the seed on every new epoch.")
 register_arg("min_snr_gamma", "", "float", "Gamma for reducing the weight of high loss timesteps. Lower numbers have stronger effect. 5 is recommended by paper.")
 register_arg("with_pertubation_noise", False, "bool", "Enhancement that increases how fast convergence occurs.")
-register_arg("pertubation_noise_weight", 0.1, "float", "The weight of pertubation noise applied during training.")
+register_arg("perturbation_noise_weight", 0.1, "float", "The weight of pertubation noise applied during training.")
 register_arg("zero_terminal_snr", False, "bool", "Enables Zero Terminal SNR, see https://arxiv.org/pdf/2305.08891.pdf - requires force_v_pred for non SD2.1 models.")
 register_arg("force_v_pred", False, "bool", "Force enables V Prediction for models that don't officially support it - ie SD1.x.")
 register_arg("scale_v_pred_loss", False, "bool", "By scaling the loss according to the time step, the weights of global noise prediction and local noise prediction become the same, and the improvement of details may be expected.")
