@@ -2132,7 +2132,7 @@ def main():
 
                 if args.half_completion_upload and not args.save_every_quarter:
                     if not e_steps % (num_update_steps_per_epoch // 2):
-                        if e_steps > 0:
+                        if e_steps > 0 and e_steps < num_update_steps_per_epoch-1:
                             if args.webhook_url != "":
                                 # Use the regular epoch value for normal training runs, not when supplied via argument.
                                 if args.num_train_epochs == 1:

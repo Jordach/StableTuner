@@ -308,14 +308,13 @@ if are_we_constant_cosine:
 			if not args.no_exec:
 				print(f"Now training Epoch {e+1}.")
 				# Train the epoch
-				subprocess.run(launcher_args)
-				if args.webhook != "":
-					print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
-					time.sleep(3)
-					# Convert the epoch
-					subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
-					# Move the diffusers folder to safety
-					shutil.move(input_diffusers, output_path)
+				subprocess.run(launcher_args)				
+				print(f"\n\nTraining Epoch {e+1} completed, converting to safetensors now.")
+				time.sleep(3)
+				# Convert the epoch
+				subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", input_diffusers, output_checkpoint])
+				# Move the diffusers folder to safety
+				shutil.move(input_diffusers, output_path)
 			else:
 				# More debug information
 				print(f"Epoch: {e+1}, LR: {st_settings['learning_rate']}, Seed: {st_settings['seed']}, CKPT: {output_filename}")
