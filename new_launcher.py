@@ -50,7 +50,7 @@ register_arg("project_append", "", "str", "What gets added after the project nam
 register_arg("half_completion_upload", False, "bool", "Whether to upload the current epoch at 50% completion to PixelDrain during training.")
 register_arg("webhook_user", "StableTuner", "str", "The bot username for the Discord webhook.")
 register_arg("webhook_url", "", "str", "The full URL for the Discord webhook. IE: https://discord.com/api/webhooks/....")
-register_arg("epoch_number", 1, "int", "Only used with constant_cosine when used within new launcher. Will be incremented each epoch.")
+register_arg("epoch_number", -1, "int", "Only used with constant_cosine when used within new launcher. Will be incremented each epoch.")
 register_arg("debug_flag", False, "bool", "Used for development purposes. May exit, cause random effects or generate more debug logs than usual.")
 
 # Training Settings:
@@ -290,6 +290,7 @@ if are_we_constant_cosine:
 	output_path = ""
 	# We only want to train one epoch at a time
 	st_settings["num_train_epochs"] = 1
+	st_settings["epoch_number"] = 1
 	for e in range(max_epochs):
 		# Handle the cosine decay
 		st_settings["learning_rate"] = cosine_curve(e, max_epochs)
@@ -302,6 +303,7 @@ if are_we_constant_cosine:
 			# Debug printing
 			if args.no_exec:
 				print(f"Using pretrained_model_name_or_path: {st_settings['pretrained_model_name_or_path']}")
+				print(f"Epoch Number: {st_settings['epoch_number']}")
 			
 			if not args.no_exec:
 				print(f"Now training Epoch {e+1}.")
@@ -333,7 +335,7 @@ if are_we_constant_cosine:
 				st_settings["train_text_encoder"] = False
 				print("Disabling text encoder training.")
 		st_settings["pretrained_model_name_or_path"] = output_path
-
+		st_settings["epoch_number"] += 1
 		if e >= args.resume_ccosine-1:
 			if args.no_exec:
 				print(f"Diffusers: {input_diffusers}, Rename: {output_path}\n")
@@ -344,12 +346,15 @@ if are_we_constant_cosine:
 				pixeldrain_api = "https://pixeldrain.com/api/file"
 				pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
 				pixeldrain_json = pixeldrain_response.json()
+				trainer_name = "StableTuner"
+				if st_settings["webhook_user"]:
+					trainer_name = st_settings["webhook_user"]
 				if pixeldrain_json["success"]:
-					data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": "Fluffusion Trainer"}
+					data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": trainer_name}
 					webhook = requests.post(args.webhook, json=data)
 					print(f"Uploaded to PixelDrain as: https://pixeldrain.com/u/{pixeldrain_json['id']}")
 				else:
-					data = {"content": f"PixelDrain is down or something happened during upload. :(\nReason: {pixeldrain_json['message']}\nType: {pixeldrain_json['value']}", "username": "Fluffusion Trainer"}
+					data = {"content": f"PixelDrain is down or something happened during upload. :(\nReason: {pixeldrain_json['message']}\nType: {pixeldrain_json['value']}", "username": trainer_name}
 					webhook = requests.post(args.webhook, json=data)
 
 else:

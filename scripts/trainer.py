@@ -111,7 +111,7 @@ def parse_args():
     parser.add_argument("--half_completion_upload",          default=False, action="store_true", help="Whether to upload the current epoch at 50% completion to PixelDrain.")
     parser.add_argument("--webhook_user",                    default="StableTuner", type=str, help="The bot username for the Discord webhook.")
     parser.add_argument("--webhook_url",                     default="", type=str, help="The full URL for the Discord webhook. IE: https://discord.com/api/webhooks/....")
-    parser.add_argument("--epoch_number",                    default="-1", type=str, help="Only used with constant_cosine when used within new launcher and when total epochs equal 1.")
+    parser.add_argument("--epoch_number",                    default="-1", type=int, help="Only used with constant_cosine when used within new launcher and when total epochs equal 1.")
 
     # Extra Settings
     parser.add_argument("--debug_flag",                    default=False, action="store_true", help="Used for development purposes. May exit, cause random effects or generate more debug logs than usual.")
@@ -124,14 +124,6 @@ def parse_args():
     return args
 
 args = parse_args()
-
-# Identify local cwd in relation to new_launcher.py
-if args.debug_flag:
-    cwd = os.getcwd()
-    print(cwd)
-    import time
-    time.sleep(10)
-    raise SystemExit
 
 # Since we've passed any possible startup based debugging features - load the remaining dependancies:
 import random
@@ -164,6 +156,8 @@ from PIL import Image, ImageFile
 from diffusers.utils.import_utils import is_xformers_available
 from lion_pytorch import Lion
 import trainer_util as tu
+import subprocess
+import requests
 
 from clip_segmentation import ClipSeg
 import gc
@@ -1836,7 +1830,7 @@ def main():
     logger.info(f"Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
     logger.info(f"Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"Total optimization steps = {args.max_train_steps}")
-    def save_and_sample_weights(step,context='checkpoint',save_model=True, auto_upload=False, complete=False):
+    def save_and_sample_weights(step,context='checkpoint',save_model=True, auto_upload=False, complete=True):
         try:
             # Create the pipeline using using the trained modules and save it.
             if accelerator.is_main_process:
@@ -1902,13 +1896,32 @@ def main():
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
                         torch.cuda.ipc_collect()
+
                 if save_model == True:
-                    tqdm.write(f"{bcolors.OKGREEN}Weights saved to {save_dir}{bcolors.ENDC}")
+                    tqdm.write(f"{bcolors.OKGREEN}Diffusers weights saved to {save_dir}{bcolors.ENDC}")
                     if auto_upload:
+                        output_filename = f"{save_name}.safetensors"
+                        save_tensors = os.path.join(args.output_dir, output_filename)
+                        if args.webhook_url == "test":
+                            tqdm.write(f"{args.output_dir}")
+                            tqdm.write(f"{save_dir}")
+                            tqdm.write(f"{save_tensors}")
+                        subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", save_dir, save_tensors])
                         if args.webhook_url == "test":
                             tqdm.write(f"{bcolors.OKGREEN}This is a test of the PixelDrain uploader{bcolors.ENDC}")
                         else:
-                            pass
+                            file = open(save_tensors)
+                            pixeldrain_api = "https://pixeldrain.com/api/file"
+                            pixeldrain_response = requests.post(pixeldrain_api, files = {"file": file, "name": output_filename, "anonymous": True})
+                            pixeldrain_json = pixeldrain_response.json()
+                            if pixeldrain_json["success"]:
+                                data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": args.webhook_user}
+                                webhook = requests.post(args.webhook, json=data)
+                                tqdm.write(f"{bcolors.OKGREEN}Uploaded to PixelDrain as: https://pixeldrain.com/u/{pixeldrain_json['id']}{bcolors.ENDC}")
+                            else:
+                                data = {"content": f"PixelDrain is down or something happened during upload. :(\nReason: {pixeldrain_json['message']}\nType: {pixeldrain_json['value']}", "username": args.webhook_user}
+                                webhook = requests.post(args.webhook, json=data)
+
         except Exception as e:
             print(e)
             print(f"{bcolors.FAIL} Error occured during sampling, skipping.{bcolors.ENDC}")
@@ -2121,7 +2134,14 @@ def main():
                     if not e_steps % (num_update_steps_per_epoch // 2):
                         if e_steps > 0:
                             if args.webhook_url != "":
-                                save_and_sample_weights(epoch, 'epoch', save_model=True, auto_upload=True, complete=False)
+                                if args.webhook_url == "test":
+                                    tqdm.write("Model Print Event Confirmed")
+                                else:
+                                    # Use the regular epoch value for normal training runs, not when supplied via argument.
+                                    if args.num_train_epochs == 1:
+                                        save_and_sample_weights(int(args.epoch_number), 'epoch', save_model=True, auto_upload=True, complete=False)
+                                    elif args.num_train_epochs > 1 and args.num_train_epochs > int(args.epoch_number):
+                                        save_and_sample_weights(epoch, 'epoch', save_model=True, auto_upload=True, complete=False)
                 elif args.save_every_quarter:
                     if not e_steps % (num_update_steps_per_epoch // 4):
                         if e_steps > 0 and model_outputs < 3:
