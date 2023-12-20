@@ -1918,17 +1918,17 @@ def main():
                             pixeldrain_json = pixeldrain_response.json()
                             if pixeldrain_json["success"]:
                                 data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": args.webhook_user}
-                                webhook = requests.post(args.webhook, json=data)
+                                webhook = requests.post(args.webhook_url, json=data)
                                 tqdm.write(f"{bcolors.OKGREEN}Uploaded to PixelDrain as: https://pixeldrain.com/u/{pixeldrain_json['id']}{bcolors.ENDC}")
                             else:
                                 data = {"content": f"Something happened on PixelDrain's backend. :(\nReason: {pixeldrain_json['message']}\nType: {pixeldrain_json['value']}", "username": args.webhook_user}
-                                webhook = requests.post(args.webhook, json=data)
+                                webhook = requests.post(args.webhook_url, json=data)
                         except requests.exceptions.Timeout:
                                 data = {"content": f"PixelDrain timed out during upload. :(\nReason: Network Timeout.", "username": args.webhook_user}
-                                webhook = requests.post(args.webhook, json=data)
+                                webhook = requests.post(args.webhook_url, json=data)
                         except:
                                 data = {"content": f"PixelDrain is down or something else happened during upload. :(\nReason: Unknown.", "username": args.webhook_user}
-                                webhook = requests.post(args.webhook, json=data)
+                                webhook = requests.post(args.webhook_url, json=data)
         except Exception as e:
             print(e)
             print(f"{bcolors.FAIL} Error occured during sampling, skipping.{bcolors.ENDC}")
