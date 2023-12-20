@@ -126,7 +126,8 @@ args = parse_args()
 
 # Identify local cwd in relation to new_launcher.py
 if args.debug_flag:
-    print(os.getcwd())
+    cwd = os.getcwd()
+    print(cwd)
     raise SystemExit
 
 # Since we've passed any possible startup based debugging features - load the remaining dependancies:
