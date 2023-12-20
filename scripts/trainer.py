@@ -105,12 +105,12 @@ def parse_args():
     parser.add_argument("--add_class_images_to_dataset",   default=False, action="store_true", help="will generate and add class images to the dataset without using prior reservation in training")
     
     # Project Settings
-    parser.add_argument("project_name",                    default="model", type="str", help="The model name prefix. IE: yourmodel_rev_1")
-    parser.add_argument("project_append",                  default="", type="str", help="The model name suffix. IE: yourmodel_rev_1_e1_your_append")
-    parser.add_argument("half_completion_upload",          default=False, action="store_true", help="Whether to upload the current epoch at 50% completion to PixelDrain.")
-    parser.add_argument("webhook_user",                    default="StableTuner", type="str", help="The bot username for the Discord webhook.")
-    parser.add_argument("webhook_url",                     default="", type="str", help="The full URL for the Discord webhook. IE https://discord.com/api/webhooks/....")
-    parser.add_argument("epoch_number",                    default="-1", type="str", help="Only used with constant_cosine when used within new launcher and when total epochs equal 1.")
+    parser.add_argument("--project_name",                    default="model", type="str", help="The model name prefix. IE: yourmodel_rev_1")
+    parser.add_argument("--project_append",                  default="", type="str", help="The model name suffix. IE: yourmodel_rev_1_e1_your_append")
+    parser.add_argument("--half_completion_upload",          default=False, action="store_true", help="Whether to upload the current epoch at 50% completion to PixelDrain.")
+    parser.add_argument("--webhook_user",                    default="StableTuner", type="str", help="The bot username for the Discord webhook.")
+    parser.add_argument("--webhook_url",                     default="", type="str", help="The full URL for the Discord webhook. IE: https://discord.com/api/webhooks/....")
+    parser.add_argument("--epoch_number",                    default="-1", type="str", help="Only used with constant_cosine when used within new launcher and when total epochs equal 1.")
 
     # Extra Settings
     parser.add_argument("--debug_flag",                    default=False, action="store_true", help="Used for development purposes. May exit, cause random effects or generate more debug logs than usual.")
