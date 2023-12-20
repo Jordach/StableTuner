@@ -1931,7 +1931,7 @@ def main():
                                 webhook = requests.post(args.webhook_url, json=data)
         except Exception as e:
             print(e)
-            print(f"{bcolors.FAIL} Error occured during sampling, skipping.{bcolors.ENDC}")
+            print(f"{bcolors.FAIL}An Exeception occured during saving or uploading, skipping.{bcolors.ENDC}")
             pass
 
     # Only show the progress bar once on each machine.
