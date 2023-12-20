@@ -109,7 +109,7 @@ def parse_args():
     parser.add_argument("project_append",                  default="", type="str", help="The model name suffix. IE: yourmodel_rev_1_e1_your_append")
     parser.add_argument("half_completion_upload",          default=False, action="store_true", help="Whether to upload the current epoch at 50% completion to PixelDrain.")
     parser.add_argument("webhook_user",                    default="StableTuner", type="str", help="The bot username for the Discord webhook.")
-    parser.add_argument("webhook_url",                     default="", type="str", help="The full URL for the Discord webhook. IE: https://discord.com/api/webhooks/....")
+    parser.add_argument("webhook_url",                     default="", type="str", help="The full URL for the Discord webhook. IE https://discord.com/api/webhooks/....")
     parser.add_argument("epoch_number",                    default="-1", type="str", help="Only used with constant_cosine when used within new launcher and when total epochs equal 1.")
 
     # Extra Settings
