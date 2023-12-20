@@ -128,6 +128,8 @@ args = parse_args()
 if args.debug_flag:
     cwd = os.getcwd()
     print(cwd)
+    import time
+    time.sleep(10)
     raise SystemExit
 
 # Since we've passed any possible startup based debugging features - load the remaining dependancies:
