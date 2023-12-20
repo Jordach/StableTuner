@@ -1924,10 +1924,10 @@ def main():
                                 data = {"content": f"Something happened on PixelDrain's backend. :(\nReason: {pixeldrain_json['message']}\nType: {pixeldrain_json['value']}", "username": args.webhook_user}
                                 webhook = requests.post(args.webhook, json=data)
                         except requests.exceptions.Timeout:
-                                data = {"content": f"PixelDrain timed out during upload. :(\nReason: {pixeldrain_json['message']}\nType: {pixeldrain_json['value']}", "username": args.webhook_user}
+                                data = {"content": f"PixelDrain timed out during upload. :(\nReason: Network Timeout.", "username": args.webhook_user}
                                 webhook = requests.post(args.webhook, json=data)
                         except:
-                                data = {"content": f"PixelDrain is down or something else happened during upload. :(\nReason: {pixeldrain_json['message']}\nType: {pixeldrain_json['value']}", "username": args.webhook_user}
+                                data = {"content": f"PixelDrain is down or something else happened during upload. :(\nReason: Unknown.", "username": args.webhook_user}
                                 webhook = requests.post(args.webhook, json=data)
         except Exception as e:
             print(e)
