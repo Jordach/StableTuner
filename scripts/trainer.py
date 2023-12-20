@@ -2134,14 +2134,11 @@ def main():
                     if not e_steps % (num_update_steps_per_epoch // 2):
                         if e_steps > 0:
                             if args.webhook_url != "":
-                                if args.webhook_url == "test":
-                                    tqdm.write("Model Print Event Confirmed")
-                                else:
-                                    # Use the regular epoch value for normal training runs, not when supplied via argument.
-                                    if args.num_train_epochs == 1:
-                                        save_and_sample_weights(int(args.epoch_number), 'epoch', save_model=True, auto_upload=True, complete=False)
-                                    elif args.num_train_epochs > 1 and args.num_train_epochs > int(args.epoch_number):
-                                        save_and_sample_weights(epoch, 'epoch', save_model=True, auto_upload=True, complete=False)
+                                # Use the regular epoch value for normal training runs, not when supplied via argument.
+                                if args.num_train_epochs == 1:
+                                    save_and_sample_weights(int(args.epoch_number), 'epoch', save_model=True, auto_upload=True, complete=False)
+                                elif args.num_train_epochs > 1 and args.num_train_epochs > int(args.epoch_number):
+                                    save_and_sample_weights(epoch, 'epoch', save_model=True, auto_upload=True, complete=False)
                 elif args.save_every_quarter:
                     if not e_steps % (num_update_steps_per_epoch // 4):
                         if e_steps > 0 and model_outputs < 3:
