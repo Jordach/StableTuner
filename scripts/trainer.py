@@ -13,53 +13,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import gradio as gr
-import argparse
-import random
-import hashlib
-import itertools
-import json
-import math
-import os
-from contextlib import nullcontext
-from pathlib import Path
-from typing import Optional
-import shutil
-import torch
-import torch.nn.functional as F
-import torch.utils.checkpoint
-from torch.utils.data import Dataset
-import numpy as np
-from accelerate import Accelerator
-from accelerate.logging import get_logger
-from accelerate.utils import set_seed
-from diffusers import AutoencoderKL, DDIMScheduler, DDPMScheduler, DiffusionPipeline, UNet2DConditionModel,DiffusionPipeline, DPMSolverMultistepScheduler,EulerDiscreteScheduler
-#from diffusers.training_utils import EMAModel
-from diffusers.optimization import get_scheduler
-from huggingface_hub import HfFolder, Repository, whoami
-from torchvision import transforms
-from torchvision.transforms import functional
-from tqdm.auto import tqdm
-from transformers import CLIPTextModel, CLIPTokenizer
-from typing import Dict, List, Generator, Tuple
-from PIL import Image, ImageFile
-from diffusers.utils.import_utils import is_xformers_available
-from lion_pytorch import Lion
-import trainer_util as tu
 
-from clip_segmentation import ClipSeg
-import gc
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKCYAN = '\033[96m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-logger = get_logger(__name__)
+# Import argparse first before initialising trainer for debug purposes first
+import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
 
@@ -148,12 +104,77 @@ def parse_args():
     parser.add_argument("--sample_batch_size",             default=4, type=int, help="Batch size (per device) for sampling images.")
     parser.add_argument("--add_class_images_to_dataset",   default=False, action="store_true", help="will generate and add class images to the dataset without using prior reservation in training")
     
+    # Project Settings
+    parser.add_argument("project_name",                    default="model", type="str", help="The model name prefix. IE: yourmodel_rev_1")
+    parser.add_argument("project_append",                  default="", type="str", help="The model name suffix. IE: yourmodel_rev_1_e1_your_append")
+    parser.add_argument("half_completion_upload",          default=False, action="store_true", help="Whether to upload the current epoch at 50% completion to PixelDrain.")
+    parser.add_argument("webhook_user",                    default="StableTuner", type="str", help="The bot username for the Discord webhook.")
+    parser.add_argument("webhook_url",                     default="", type="str", help="The full URL for the Discord webhook. IE: https://discord.com/api/webhooks/....")
+    parser.add_argument("epoch_number",                    default="-1", type="str", help="Only used with constant_cosine when used within new launcher and when total epochs equal 1.")
+
+    # Extra Settings
+    parser.add_argument("--debug_flag",                    default=False, action="store_true", help="Used for development purposes. May exit, cause random effects or generate more debug logs than usual.")
     args = parser.parse_args()
+
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
         args.local_rank = env_local_rank
 
     return args
+
+args = parse_args()
+
+# Identify local cwd in relation to new_launcher.py
+if args.debug_flag:
+    print(os.getcwd())
+    raise SystemExit
+
+# Since we've passed any possible startup based debugging features - load the remaining dependancies:
+import random
+import hashlib
+import itertools
+import json
+import math
+import os
+from contextlib import nullcontext
+from pathlib import Path
+from typing import Optional
+import shutil
+import torch
+import torch.nn.functional as F
+import torch.utils.checkpoint
+from torch.utils.data import Dataset
+import numpy as np
+from accelerate import Accelerator
+from accelerate.logging import get_logger
+from accelerate.utils import set_seed
+from diffusers import AutoencoderKL, DDIMScheduler, DDPMScheduler, DiffusionPipeline, UNet2DConditionModel,DiffusionPipeline, DPMSolverMultistepScheduler,EulerDiscreteScheduler
+#from diffusers.training_utils import EMAModel
+from diffusers.optimization import get_scheduler
+from huggingface_hub import HfFolder, Repository, whoami
+from torchvision import transforms
+from torchvision.transforms import functional
+from tqdm.auto import tqdm
+from transformers import CLIPTextModel, CLIPTokenizer
+from typing import Dict, List, Generator, Tuple
+from PIL import Image, ImageFile
+from diffusers.utils.import_utils import is_xformers_available
+from lion_pytorch import Lion
+import trainer_util as tu
+
+from clip_segmentation import ClipSeg
+import gc
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+logger = get_logger(__name__)
 
 def add_ratio_to_bucket(x, y, bucket):
     bucket.append([x, y])
@@ -1260,7 +1281,6 @@ def main():
     print(f"{bcolors.OKBLUE}Booting Up StableTuner{bcolors.ENDC}") 
     print(f"{bcolors.OKBLUE}Please wait a moment as we load up some stuff...{bcolors.ENDC}") 
     #torch.cuda.set_per_process_memory_fraction(0.5)
-    args = parse_args()
     if args.disable_cudnn_benchmark:
         torch.backends.cudnn.benchmark = False
     else:
@@ -1813,17 +1833,8 @@ def main():
     logger.info(f"Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
     logger.info(f"Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"Total optimization steps = {args.max_train_steps}")
-    def save_and_sample_weights(step,context='checkpoint',save_model=True):
+    def save_and_sample_weights(step,context='checkpoint',save_model=True, auto_upload=False, complete=False):
         try:
-            #check how many folders are in the output dir
-            #if there are more than 5, delete the oldest one
-            #save the model
-            #save the optimizer
-            #save the lr_scheduler
-            #save the args
-            
-            #oldest_folder_path = os.path.join(args.output_dir, oldest_folder)
-            #shutil.rmtree(oldest_folder_path)
             # Create the pipeline using using the trained modules and save it.
             if accelerator.is_main_process:
                 if 'step' in context:
@@ -1861,11 +1872,21 @@ def main():
                     requires_safety_checker=False
                 )
                 pipeline.scheduler = schedule
-                save_dir = os.path.join(args.output_dir, f"{context}_{step+1}")
+                save_name = f"{context}_{step+1}"
+                if auto_upload:
+                    if complete:
+                        save_name = f"{args.project_name}_e{step}"
+                    else:
+                        save_name = f"{args.project_name}_e{step}-pre"
+
+                    if args.project_append != "":
+                        save_name += f"_{args.project_append}"
+
+                save_dir = os.path.join(args.output_dir, save_name)
                 if args.stop_text_encoder_training == True:
                     save_dir = frozen_directory
                 if save_model:
-                    pipeline.save_pretrained(save_dir,safe_serialization=True)
+                    pipeline.save_pretrained(save_dir, safe_serialization=True)
                     with open(os.path.join(save_dir, "args.json"), "w") as f:
                             json.dump(args.__dict__, f, indent=2)
                 if args.stop_text_encoder_training == True:
@@ -1879,7 +1900,12 @@ def main():
                         torch.cuda.empty_cache()
                         torch.cuda.ipc_collect()
                 if save_model == True:
-                    print(f"{bcolors.OKGREEN}Weights saved to {save_dir}{bcolors.ENDC}")
+                    tqdm.write(f"{bcolors.OKGREEN}Weights saved to {save_dir}{bcolors.ENDC}")
+                    if auto_upload:
+                        if args.webhook_url == "test":
+                            tqdm.write(f"{bcolors.OKGREEN}This is a test of the PixelDrain uploader{bcolors.ENDC}")
+                        else:
+                            pass
         except Exception as e:
             print(e)
             print(f"{bcolors.FAIL} Error occured during sampling, skipping.{bcolors.ENDC}")
@@ -2088,28 +2114,22 @@ def main():
                 global_step += 1
                 e_steps += 1
 
-                if args.save_every_quarter:
+                if args.half_completion_upload and not args.save_every_quarter:
+                    if not e_steps % (num_update_steps_per_epoch // 2):
+                        if e_steps > 0:
+                            if args.webhook_url != "":
+                                save_and_sample_weights(epoch, 'epoch', save_model=True, auto_upload=True, complete=False)
+                elif args.save_every_quarter:
                     if not e_steps % (num_update_steps_per_epoch // 4):
                         if e_steps > 0 and model_outputs < 3:
                             save_and_sample_weights(global_step,'step',save_model=True)
                             model_outputs += 1
 
-                if mid_checkpoint_step == True:
-                    save_and_sample_weights(global_step,'step',save_model=True)
-                    mid_checkpoint_step=False
                 if global_step >= args.max_train_steps:
                     break
             progress_bar_e.update(1)
-            if mid_quit==True:
-                accelerator.wait_for_everyone()
-                save_and_sample_weights(epoch,'quit_epoch')
-                quit()
             if not epoch % args.save_every_n_epoch:
                 save_and_sample_weights(epoch,'epoch')
-            if epoch % args.save_every_n_epoch and mid_checkpoint==True or mid_sample==True:
-                if mid_checkpoint==True:
-                    save_and_sample_weights(epoch,'epoch',True)
-                    mid_checkpoint=False
             if args.seed is not None and args.epoch_seed:
                 set_seed(args.seed + (1 + epoch))
             accelerator.wait_for_everyone()

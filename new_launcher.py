@@ -45,8 +45,12 @@ def register_arg(name, default, datatype, comment):
 
 # Project Settings:
 st_comments["header0"] = "Project Settings:"
-register_arg("project_name", "model", "str", "The model name for your training run.")
-register_arg("project_append", "", "str", "What gets added after the project name and epoch.")
+register_arg("project_name", "model", "str", "The model name for your training run. Also applies to halfway model exports.")
+register_arg("project_append", "", "str", "What gets added after the project name and epoch. Also applies to halfway model exports.")
+register_arg("half_completion_upload", False, "bool", "Whether to upload the current epoch at 50% completion to PixelDrain during training.")
+register_arg("webhook_user", "StableTuner", "str", "The bot username for the Discord webhook.")
+register_arg("webhook_url", "", "str", "The full URL for the Discord webhook. IE: https://discord.com/api/webhooks/....")
+register_arg("epoch_number", 1, "int", "Only used with constant_cosine when used within new launcher. Will be incremented each epoch")
 
 # Training Settings:
 st_comments["header1"] = "Training Settings:"
@@ -220,7 +224,7 @@ if "project_append" not in st_settings:
 # Generate the launch command for StableTuner
 launcher_args = ["accelerate", "launch", '--mixed_precision=fp16', "scripts/trainer.py"]
 
-skip_these_settings = {"project_name": True, "project_append": True, "disable_text_encoder_after": True}
+skip_these_settings = {"disable_text_encoder_after": True}
 def parse_settings(settings):
 	global launcher_args
 	launcher_args = ["accelerate", "launch", '--mixed_precision=fp16', "scripts/trainer.py"]
