@@ -50,7 +50,8 @@ register_arg("project_append", "", "str", "What gets added after the project nam
 register_arg("half_completion_upload", False, "bool", "Whether to upload the current epoch at 50% completion to PixelDrain during training.")
 register_arg("webhook_user", "StableTuner", "str", "The bot username for the Discord webhook.")
 register_arg("webhook_url", "", "str", "The full URL for the Discord webhook. IE: https://discord.com/api/webhooks/....")
-register_arg("epoch_number", 1, "int", "Only used with constant_cosine when used within new launcher. Will be incremented each epoch")
+register_arg("epoch_number", 1, "int", "Only used with constant_cosine when used within new launcher. Will be incremented each epoch.")
+register_arg("debug_flag", False, "bool", "Used for development purposes. May exit, cause random effects or generate more debug logs than usual.")
 
 # Training Settings:
 st_comments["header1"] = "Training Settings:"
