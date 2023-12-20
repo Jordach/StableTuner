@@ -16,6 +16,7 @@ limitations under the License.
 
 # Import argparse first before initialising trainer for debug purposes first
 import argparse
+import os
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
 
@@ -138,7 +139,6 @@ import hashlib
 import itertools
 import json
 import math
-import os
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional
