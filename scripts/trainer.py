@@ -1903,32 +1903,7 @@ def main():
                     if auto_upload:
                         output_filename = f"{save_name}.safetensors"
                         save_tensors = os.path.join(args.output_dir, output_filename)
-                        #if args.webhook_url == "test":
-                            #tqdm.write(f"{args.output_dir}")
-                            #tqdm.write(f"{save_dir}")
-                            #tqdm.write(f"{save_tensors}")
                         subprocess.run(["python", "scripts/convert_diffusers_to_sd_cli.py", save_dir, save_tensors])
-                        #if args.webhook_url == "test":
-                            #tqdm.write(f"{bcolors.OKGREEN}This is a test of the PixelDrain uploader{bcolors.ENDC}")
-                        #else:
-                        file = open(save_tensors)
-                        pixeldrain_api = "https://pixeldrain.com/api/file"
-                        try:
-                            pixeldrain_response = requests.post(pixeldrain_api, timeout=3600, files={"file": file, "name": output_filename, "anonymous": True})
-                            pixeldrain_json = pixeldrain_response.json()
-                            if pixeldrain_json["success"]:
-                                data = {"content": f"# New Checkpoint! :tada:\n\n{output_filename}:\nhttps://pixeldrain.com/u/{pixeldrain_json['id']}", "username": args.webhook_user}
-                                webhook = requests.post(args.webhook_url, json=data)
-                                tqdm.write(f"{bcolors.OKGREEN}Uploaded to PixelDrain as: https://pixeldrain.com/u/{pixeldrain_json['id']}{bcolors.ENDC}")
-                            else:
-                                data = {"content": f"Something happened on PixelDrain's backend. :(\nReason: {pixeldrain_json['message']}\nType: {pixeldrain_json['value']}", "username": args.webhook_user}
-                                webhook = requests.post(args.webhook_url, json=data)
-                        except requests.exceptions.Timeout:
-                                data = {"content": f"PixelDrain timed out during upload. :(\nReason: Network Timeout.", "username": args.webhook_user}
-                                webhook = requests.post(args.webhook_url, json=data)
-                        except:
-                                data = {"content": f"PixelDrain is down or something else happened during upload. :(\nReason: Unknown.", "username": args.webhook_user}
-                                webhook = requests.post(args.webhook_url, json=data)
         except Exception as e:
             print(e)
             print(f"{bcolors.FAIL}An Exeception occured during saving or uploading, skipping.{bcolors.ENDC}")
