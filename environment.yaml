@@ -21,7 +21,7 @@ channels:
 # Psst. If you change a dependency, make sure it's mirrored in the docker requirement
 # files as well.
 dependencies:
-  - cudatoolkit=11.7
+  - cudatoolkit=11.8
   - git
   - numpy
   - pip
