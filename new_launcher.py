@@ -177,7 +177,7 @@ with open(args.config, "r", encoding="utf-8") as config:
 		# Skip commented lines
 		if config.startswith("#") or config.strip() == "":
 			continue
-		conf = config.lower().strip().split(",", 1)
+		conf = config.strip().split(",", 1)
 		# Only do matching arguments
 		if conf[0] in st_args:
 			conf_value = conf[1]
