@@ -2028,9 +2028,9 @@ def main():
                                 encode = ""
                                 
                                 if args.multi_gpu:
-                                    encode = accelerator.unwrap_model(text_encoder)(chunk, output_hidden_states=True)
+                                    encode = accelerator.unwrap_model(text_encoder)(chunk, output_hidden_states=True).to(accelerator.device)
                                 else:
-                                    encode = text_encoder(chunk, output_hidden_states=True)
+                                    encode = text_encoder(chunk, output_hidden_states=True).to(accelerator.device)
                                 if z is None:
                                     if args.clip_penultimate:
                                         if args.multi_gpu:
@@ -2056,7 +2056,7 @@ def main():
                                             z = torch.cat((z, accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-1])), dim=-2)
                                         else:
                                             z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])), dim=-2)
-                                del encode
+                                #del encode
 
                                 clamp_chunk += 1
                                 del chunk
