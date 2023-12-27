@@ -128,6 +128,7 @@ register_arg("log_interval", 10, "int", "Log every N steps.")
 register_arg("overwrite_csv_logs", False, "bool", "Overwrites the CSV containing loss, LR, current step, current epoch and a timestamp when starting a new training session.")
 register_arg("local_rank", 1, "int", "For distributed training: local_rank.")
 register_arg("detect_full_drive", True, "bool", "Detects when the storage drive is full and deletes older checkpoints.")
+register_arg("multi_gpu", False, "bool", "Enable this flag if you're using multi-GPU in HF Accelerate, otherwise, it's treated as a single GPU system.")
 
 # Dreambooth Settings
 st_comments["header6"] = "Dreambooth Settings:"

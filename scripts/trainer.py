@@ -89,6 +89,7 @@ def parse_args():
     parser.add_argument("--overwite_csv_logs",             default=False, action="store_true", help="Overwrites a CSV containing loss, LR, current step, current epoch and a timestamp when starting a new training session.")
     parser.add_argument("--local_rank",                    default=-1, type=int, help="For distributed training: local_rank")
     parser.add_argument("--detect_full_drive",             default=True, action="store_true", help="Delete checkpoints when the drive is full.")
+    parser.add_argument("--multi_gpu",                     default=False, action="store_true", help="Enable this flag if you're using multi-GPU in HF Accelerate, otherwise, it's treated as a single GPU system.")
 
     # Dreambooth Settings
     parser.add_argument("--with_prior_preservation",       default=False, action="store_true", help="Flag to add prior preservation loss.")
@@ -2024,24 +2025,33 @@ def main():
                                 chunk = chunk.to(accelerator.device)
                                 chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1)
                                 text_encoder = text_encoder.to(accelerator.device)
+                                encode = text_encoder(chunk, output_hidden_states=True)
                                 if z is None:
                                     if args.clip_penultimate:
-                                        encode = text_encoder(chunk, output_hidden_states=True)
-                                        z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
+                                        if args.multi_gpu:
+                                            z = accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-2])
+                                        else:
+                                            z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
                                         del encode
                                     else:
-                                        encode = text_encoder(chunk, output_hidden_states=True)
-                                        z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])
-                                        del encode
+                                        if args.multi_gpu:
+                                            z = accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-1])
+                                        else:
+                                            z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])
                                 else:
+                                    z = z.to(accelerator.device)
                                     if args.clip_penultimate:
-                                        encode = text_encoder(chunk, output_hidden_states=True)
-                                        z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
+                                        if args.multi_gpu:
+                                            z = torch.cat((z, accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
+                                        else:
+                                            z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
                                         del encode
                                     else:
-                                        encode = text_encoder(chunk, output_hidden_states=True)
-                                        z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])), dim=-2)
-                                        del encode
+                                        if args.multi_gpu:
+                                            z = torch.cat((z, accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-1])), dim=-2)
+                                        else:
+                                            z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])), dim=-2)
+                                del encode
 
                                 clamp_chunk += 1
                                 del chunk
