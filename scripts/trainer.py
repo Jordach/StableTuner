@@ -1306,11 +1306,12 @@ def main():
     # Currently, it's not possible to do gradient accumulation when training two models with accelerate.accumulate
     # This will be enabled soon in accelerate. For now, we don't allow gradient accumulation when training two models.
     # TODO (patil-suraj): Remove this check when gradient accumulation with two models is enabled in accelerate.
-    if args.train_text_encoder and args.gradient_accumulation_steps > 1 and accelerator.num_processes > 1:
-        raise ValueError(
-            "Gradient accumulation is not supported when training the text encoder in distributed training. "
-            "Please set gradient_accumulation_steps to 1. This feature will be supported in the future."
-        )
+    if args.debug_flag:
+        if args.train_text_encoder and args.gradient_accumulation_steps > 1 and accelerator.num_processes > 1:
+            raise ValueError(
+                "Gradient accumulation is not supported when training the text encoder in distributed training. "
+                "Please set gradient_accumulation_steps to 1. This feature will be supported in the future."
+            )
 
     if args.seed is not None:
         set_seed(args.seed)
