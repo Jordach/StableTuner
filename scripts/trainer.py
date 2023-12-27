@@ -2095,6 +2095,9 @@ def main():
                         elif noise_scheduler.config.prediction_type == "v_prediction":
                             are_we_v_pred = True
 
+                        if args.multi_gpu:
+                            target = target.to(accelerator.device)
+                            model_pred = model_pred.to(accelerator.device)
                         loss = (target.float() - model_pred.float()) ** 2
                         loss = loss.mean([1, 2, 3])
                         loss = tu.apply_snr_weight_neo(are_we_v_pred, loss.float(), timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
