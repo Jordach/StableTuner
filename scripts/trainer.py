@@ -2031,7 +2031,7 @@ def main():
                                     encode = accelerator.unwrap_model(text_encoder)(chunk, output_hidden_states=True)
                                 else:
                                     encode = text_encoder(chunk, output_hidden_states=True)
-                                encode = encode.to(accelerator.device)
+                                
                                 if z is None:
                                     if args.clip_penultimate:
                                         if args.multi_gpu:
