@@ -103,7 +103,7 @@ register_arg("attention", "xformers", "str", "The type of attention to use, xfor
 register_arg("disable_cudnn_benchmark", True, "bool", "Disables the benchmark built into CuDNN. Always leave this enabled.")
 register_arg("gradient_accumulation_steps", 1, "int", "Number of updates steps to accumulate before performing a backwards/update pass.")
 register_arg("gradient_checkpointing", False, "bool", "Whether or not to use gradient checkpointing to save memory at the expense of a slower backwards/update pass.")
-register_arg("scale_lr", False, "bool", "Scale the learning rate by the number of active GPUs, gradient accumulation steps and batch size.")
+register_arg("scale_lr", False, "bool", "Scale the learning rate by the number of active GPUs and gradient accumulation steps.")
 register_arg("use_8bit_adam", False, "bool", "Whether or not to use 8-bit Adam from bitsandbytes. Required on NVIDIA cards with 24GBs of VRAM or less for finetuning.")
 register_arg("use_lion", False, "bool", "Whether or not to use the Lion optimiser.")
 register_arg("adam_beta1", 0.9, "float", "The beta1 parameter for the Adam optimiser.")

@@ -65,7 +65,7 @@ def parse_args():
     parser.add_argument('--disable_cudnn_benchmark',       default=True, action="store_true")
     parser.add_argument("--gradient_accumulation_steps",   default=1, type=int, help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--gradient_checkpointing",        default=False, action="store_true", help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.")
-    parser.add_argument("--scale_lr",                      default=False, action="store_true", help="Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.")
+    parser.add_argument("--scale_lr",                      default=False, action="store_true", help="Scale the learning rate by the number of active GPUs and gradient accumulation steps.")
     parser.add_argument("--use_8bit_adam",                 default=False, action="store_true", help="Whether or not to use 8-bit Adam from bitsandbytes.")
     parser.add_argument("--use_lion",                      default=False, action="store_true", help="Whether or not to use Lion.")
     parser.add_argument("--adam_beta1",                    default=0.9, type=float, help="The beta1 parameter for the Adam optimizer.")
@@ -1304,16 +1304,6 @@ def main():
         project_dir=logging_dir,
     )
 
-    # Currently, it's not possible to do gradient accumulation when training two models with accelerate.accumulate
-    # This will be enabled soon in accelerate. For now, we don't allow gradient accumulation when training two models.
-    # TODO (patil-suraj): Remove this check when gradient accumulation with two models is enabled in accelerate.
-    if not args.debug_flag:
-        if args.train_text_encoder and args.gradient_accumulation_steps > 1 and accelerator.num_processes > 1:
-            raise ValueError(
-                "Gradient accumulation is not supported when training the text encoder in distributed training. "
-                "Please set gradient_accumulation_steps to 1. This feature will be supported in the future."
-            )
-
     if args.seed is not None:
         set_seed(args.seed)
 
@@ -1423,10 +1413,9 @@ def main():
         if args.train_text_encoder:
             text_encoder.gradient_checkpointing_enable()
 
-    if args.scale_lr:
-        args.learning_rate = (
-            args.learning_rate * args.gradient_accumulation_steps * args.train_batch_size * accelerator.num_processes
-        )
+    if args.scale_lr and args.multi_gpu:
+        args.learning_rate = args.learning_rate * math.sqrt(args.gradient_accumulation_steps * accelerator.num_processes)
+        print(f"{bcolors.WARNING}LR rescaled to {args.learning_rate} for multiple GPU usage!{bcolors.ENDC}")
 
     # Use 8-bit Adam for lower memory usage or to fine-tune the model in 16GB GPUs
     if args.use_8bit_adam and args.use_deepspeed_adam==False:
