@@ -2033,6 +2033,7 @@ def main():
                                             z = accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-1])
                                         else:
                                             z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])
+                                    del encode
                                 else:
                                     z = z.to(accelerator.device)
                                     if args.clip_penultimate:
@@ -2046,7 +2047,7 @@ def main():
                                             z = torch.cat((z, accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-1])), dim=-2)
                                         else:
                                             z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])), dim=-2)
-                                #del encode
+                                    del encode
 
                                 clamp_chunk += 1
                                 del chunk
@@ -2104,6 +2105,10 @@ def main():
                             else unet.parameters()
                         )
                         accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
+                        # Clean up after syncing
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                            torch.cuda.ipc_collect()
                     optimizer.step()
                     lr_scheduler.step()
                     optimizer.zero_grad()
@@ -2128,12 +2133,15 @@ def main():
                             if args.webhook_url != "":
                                 # Use the regular epoch value for normal training runs, not when supplied via argument.
                                 if args.num_train_epochs == 1:
+                                    accelerator.wait_for_everyone()
                                     save_and_sample_weights(int(args.epoch_number), 'epoch', save_model=True, auto_upload=True, complete=False)
                                 elif args.num_train_epochs > 1 and args.num_train_epochs > int(args.epoch_number):
+                                    accelerator.wait_for_everyone()
                                     save_and_sample_weights(epoch, 'epoch', save_model=True, auto_upload=True, complete=False)
                 elif args.save_every_quarter:
                     if not e_steps % (num_update_steps_per_epoch // 4):
                         if e_steps > 0 and model_outputs < 3:
+                            accelerator.wait_for_everyone()
                             save_and_sample_weights(global_step,'step',save_model=True)
                             model_outputs += 1
 
@@ -2141,6 +2149,7 @@ def main():
                     break
             progress_bar_e.update(1)
             if not epoch % args.save_every_n_epoch:
+                accelerator.wait_for_everyone()
                 save_and_sample_weights(epoch,'epoch')
             if args.seed is not None and args.epoch_seed:
                 set_seed(args.seed + (1 + epoch))

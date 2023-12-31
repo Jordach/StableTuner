@@ -266,7 +266,8 @@ def apply_snr_weight_neo(is_v_prediction, loss, timesteps, noise_scheduler, gamm
         snr_weight = torch.div(min_snr_gamma, snr + 1).float().to(accelerator.device)
     else:
         snr_weight = torch.div(min_snr_gamma, snr).float().to(accelerator.device)
-    loss = loss * snr_weight
+    loss = loss * snr_weight#
+    del min_snr_gamma, snr_weight, snr
     return loss.to(accelerator.device)
 
 # Zero SNR related:
@@ -282,6 +283,7 @@ def prepare_scheduler_for_custom_training(noise_scheduler, device):
     all_snr = (alpha / sigma) ** 2
 
     noise_scheduler.all_snr = all_snr.to(device)
+    del alphas_cumprod, sqrt_alphas_cumprod, sqrt_one_minus_alphas_cumprod, alpha, sigma
 
 def enforce_zero_terminal_snr(betas):
     # Convert betas to alphas_bar_sqrt
@@ -300,6 +302,8 @@ def enforce_zero_terminal_snr(betas):
     alphas_bar = alphas_bar_sqrt ** 2
     alphas = alphas_bar[1:] / alphas_bar[:-1]
     alphas = torch.cat([alphas_bar[0:1], alphas])
+
+    del alphas_bar, alphas_bar_sqrt, alphas_bar_sqrt_0, alphas_bar_sqrt_T
     return 1 - alphas
 
 # flash attention forwards and backwards
