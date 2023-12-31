@@ -2020,20 +2020,18 @@ def main():
                                     encode = accelerator.unwrap_model(text_encoder)(chunk, output_hidden_states=True)
                                 else:
                                     encode = text_encoder(chunk, output_hidden_states=True)
-                                
+
                                 if z is None:
                                     if args.clip_penultimate:
                                         if args.multi_gpu:
                                             z = accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-2])
                                         else:
                                             z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
-                                        del encode
                                     else:
                                         if args.multi_gpu:
                                             z = accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-1])
                                         else:
                                             z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])
-                                    #del encode
                                 else:
                                     z = z.to(accelerator.device)
                                     if args.clip_penultimate:
@@ -2041,13 +2039,12 @@ def main():
                                             z = torch.cat((z, accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
                                         else:
                                             z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
-                                        del encode
                                     else:
                                         if args.multi_gpu:
                                             z = torch.cat((z, accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-1])), dim=-2)
                                         else:
                                             z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])), dim=-2)
-                                    #del encode
+                                del encode
 
                                 clamp_chunk += 1
                                 del chunk
