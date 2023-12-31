@@ -2018,7 +2018,6 @@ def main():
                                 
                                 if args.multi_gpu:
                                     encode = accelerator.unwrap_model(text_encoder)(chunk, output_hidden_states=True)
-                                    print(encode)
                                 else:
                                     encode = text_encoder(chunk, output_hidden_states=True)
                                 
@@ -2106,10 +2105,7 @@ def main():
                             else unet.parameters()
                         )
                         accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
-                        # Clean up after syncing
-                        if torch.cuda.is_available():
-                            torch.cuda.empty_cache()
-                            torch.cuda.ipc_collect()
+
                     optimizer.step()
                     lr_scheduler.step()
                     optimizer.zero_grad()
@@ -2127,6 +2123,13 @@ def main():
                 progress_bar_e.refresh()
                 global_step += 1
                 e_steps += 1
+
+                # Clean up every 2% trained while under multi GPU mode
+                if not e_steps % (num_update_steps_per_epoch // 50) and args.multi_gpu:
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        accelerator.free_memory()
+                        gc.collect()
 
                 if args.half_completion_upload and not args.save_every_quarter:
                     if not e_steps % (num_update_steps_per_epoch // 2):
