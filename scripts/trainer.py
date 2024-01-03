@@ -1912,6 +1912,7 @@ def main():
     # Torch memory debugging
     torch_mem_output = os.path.join(args.output_dir, "logs/", f"torch_main_process_memory_id_{accelerator.process_index}.pickle")
     if args.debug_flag:
+        print(f"{bcolors.WARNING}Recording memory for GPU process id {accelerator.process_index}.{bcolors.ENDC}")
         torch.cuda.memory._record_memory_history(enabled=True, max_entries=100000)
     else:
         torch.cuda.memory._record_memory_history(enabled=None)
