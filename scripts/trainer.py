@@ -1908,6 +1908,14 @@ def main():
     global_step = 0
     loss_avg = AverageMeter()
     text_enc_context = nullcontext() if args.train_text_encoder else torch.no_grad()
+
+    # Torch memory debugging
+    torch_mem_output = os.path.join(args.output_dir, "logs/", f"torch_main_process_memory_id_{accelerator.process_index}.pickle")
+    if args.debug_flag:
+        torch.cuda.memory._record_memory_history(enabled=True, max_entries=100000)
+    else:
+        torch.cuda.memory._record_memory_history(enabled=None)
+
     try:
         tqdm.write(f"{bcolors.OKBLUE}Starting Training!{bcolors.ENDC}")
 
@@ -2124,9 +2132,15 @@ def main():
                 global_step += 1
                 e_steps += 1
 
-                # Clean up every 1% trained while under multi GPU mode
+                if e_steps == 400 and args.debug_flag:
+                    try:
+                        torch.cuda.memory._dump_snapshot(torch_mem_output)
+                        torch.cuda.memory._record_memory_history(enabled=None)
+                    except:
+                        pass
+                # Clean up every 1% trained while under multi GPU mode while not in debug
                 if not e_steps % ((num_update_steps_per_epoch - 1) // 100) and args.multi_gpu:
-                    if torch.cuda.is_available():
+                    if torch.cuda.is_available() and not args.debug_flag:
                         torch.cuda.empty_cache()
                         accelerator.free_memory()
                         gc.collect()
