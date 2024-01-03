@@ -2121,8 +2121,8 @@ def main():
                 global_step += 1
                 e_steps += 1
 
-                # Clean up every 2% trained while under multi GPU mode
-                if not e_steps % (num_update_steps_per_epoch // 50) and args.multi_gpu:
+                # Clean up every 1% trained while under multi GPU mode
+                if not e_steps % ((num_update_steps_per_epoch - 1) // 100) and args.multi_gpu:
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
                         accelerator.free_memory()
