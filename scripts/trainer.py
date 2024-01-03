@@ -2107,6 +2107,8 @@ def main():
                     lr_scheduler.step()
                     optimizer.zero_grad()
                     loss_avg.update(loss.detach_(), bsz)
+                    del loss
+
                     if args.use_ema == True:
                         ema_unet.step(unet.parameters())
 
@@ -2114,6 +2116,7 @@ def main():
                     logs = {"loss": loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
                     progress_bar.set_postfix(**logs)
                     accelerator.log(logs, step=global_step)
+                    del logs
 
                 progress_bar.update(1)
                 progress_bar_inter_epoch.update(1)
