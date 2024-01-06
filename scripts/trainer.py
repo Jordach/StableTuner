@@ -1660,7 +1660,8 @@ def main():
     vae.to(accelerator.device, dtype=weight_dtype)
     if args.use_ema == True:
         ema_unet.to(accelerator.device, dtype=weight_dtype)
-    text_encoder.to(accelerator.device, dtype=weight_dtype)
+    if not args.train_text_encoder
+        text_encoder.to(accelerator.device, dtype=weight_dtype)
 
     if args.model_variant == 'inpainting':
         if args.use_bucketing:
@@ -2060,6 +2061,8 @@ def main():
                                 
                                 if args.multi_gpu:
                                     encode = accelerator.unwrap_model(text_encoder)(chunk, output_hidden_states=True)
+                                    if args.using_fsdp:
+                                        encode = encode.to(accelerator.device, dtype=torch.float32)
                                 else:
                                     encode = text_encoder(chunk, output_hidden_states=True)
 
