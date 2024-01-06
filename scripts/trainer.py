@@ -2055,8 +2055,7 @@ def main():
                                     break
 
                                 chunk = chunk.to(accelerator.device)
-                                chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1)
-                                text_encoder = text_encoder.to(accelerator.device)
+                                chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1))
                                 encode = ""
                                 
                                 if args.multi_gpu:
