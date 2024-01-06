@@ -2061,35 +2061,27 @@ def main():
                                 
                                 if args.multi_gpu:
                                     encode = accelerator.unwrap_model(text_encoder)(chunk, output_hidden_states=True)
-                                    if args.using_fsdp:
-                                        encode = encode.to(accelerator.device, dtype=torch.float32)
                                 else:
                                     encode = text_encoder(chunk, output_hidden_states=True)
 
+                                hidden_states = encode['hidden_states'][-2] if args.clip_penultimate else encode['hidden_states'][-1]
+                                if args.using_fsdp:
+                                    hidden_states = hidden_states.to(accelerator.device, dtype=torch.float32)
+
                                 if z is None:
-                                    if args.clip_penultimate:
-                                        if args.multi_gpu:
-                                            z = accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-2])
-                                        else:
-                                            z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])
+                                    if args.multi_gpu:
+                                        z = accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(hidden_states)
                                     else:
-                                        if args.multi_gpu:
-                                            z = accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-1])
-                                        else:
-                                            z = text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])
+                                        z = text_encoder.text_model.final_layer_norm(hidden_states)
                                 else:
                                     z = z.to(accelerator.device)
-                                    if args.clip_penultimate:
-                                        if args.multi_gpu:
-                                            z = torch.cat((z, accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
-                                        else:
-                                            z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-2])), dim=-2)
+                                    if args.multi_gpu:
+                                        z = torch.cat((z, accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(hidden_states)), dim=-2)
                                     else:
-                                        if args.multi_gpu:
-                                            z = torch.cat((z, accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encode['hidden_states'][-1])), dim=-2)
-                                        else:
-                                            z = torch.cat((z, text_encoder.text_model.final_layer_norm(encode['hidden_states'][-1])), dim=-2)
+                                        z = torch.cat((z, text_encoder.text_model.final_layer_norm(hidden_states)), dim=-2)
+                                        
                                 del encode
+                                del hidden_states
 
                                 clamp_chunk += 1
                                 del chunk
