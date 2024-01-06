@@ -1794,9 +1794,13 @@ def main():
             unet, text_encoder = accelerator.prepare(
                 unet, text_encoder
             )
-        unet, text_encoder, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-            unet, text_encoder, optimizer, train_dataloader, lr_scheduler
-        )
+            optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                optimizer, train_dataloader, lr_scheduler
+            )
+        else:
+            unet, text_encoder, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                unet, text_encoder, optimizer, train_dataloader, lr_scheduler
+            )
     elif args.train_text_encoder and args.use_ema:
         unet, text_encoder, ema_unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
             unet, text_encoder, ema_unet, optimizer, train_dataloader, lr_scheduler
