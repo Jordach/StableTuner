@@ -1304,6 +1304,15 @@ def main():
         project_dir=logging_dir,
     )
 
+    # Torch memory debugging
+    torch_mem_output = os.path.join(args.output_dir, "logs/", f"torch_main_process_memory_id_{accelerator.process_index}.pickle")
+    if args.debug_flag:
+        print(f"{bcolors.WARNING}Recording memory for GPU process id {accelerator.process_index}.{bcolors.ENDC}")
+        torch.cuda.memory._record_memory_history(max_entries=100000)
+    else:
+        torch.cuda.memory._record_memory_history(enabled=None)
+
+
     if args.seed is not None:
         set_seed(args.seed)
 
@@ -1781,6 +1790,10 @@ def main():
     )
 
     if args.train_text_encoder and not args.use_ema:
+        if args.multi_gpu and accelerator.num_processes > 1:
+            unet, text_encoder = accelerator.prepare(
+                unet, text_encoder
+            )
         unet, text_encoder, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
             unet, text_encoder, optimizer, train_dataloader, lr_scheduler
         )
@@ -1908,14 +1921,6 @@ def main():
     global_step = 0
     loss_avg = AverageMeter()
     text_enc_context = nullcontext() if args.train_text_encoder else torch.no_grad()
-
-    # Torch memory debugging
-    torch_mem_output = os.path.join(args.output_dir, "logs/", f"torch_main_process_memory_id_{accelerator.process_index}.pickle")
-    if args.debug_flag:
-        print(f"{bcolors.WARNING}Recording memory for GPU process id {accelerator.process_index}.{bcolors.ENDC}")
-        torch.cuda.memory._record_memory_history(max_entries=100000)
-    else:
-        torch.cuda.memory._record_memory_history(enabled=None)
 
     try:
         tqdm.write(f"{bcolors.OKBLUE}Starting Training!{bcolors.ENDC}")
