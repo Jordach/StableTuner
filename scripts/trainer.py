@@ -90,6 +90,7 @@ def parse_args():
     parser.add_argument("--local_rank",                    default=-1, type=int, help="For distributed training: local_rank")
     parser.add_argument("--detect_full_drive",             default=True, action="store_true", help="Delete checkpoints when the drive is full.")
     parser.add_argument("--multi_gpu",                     default=False, action="store_true", help="Enable this flag if you're using multi-GPU in HF Accelerate, otherwise, it's treated as a single GPU system.")
+    parser.add_argument("--using_fsdp",                    default=False, action="store_true", help="Enable this flag if you're using multi-GPU FSDP in HF Accelerate.")
 
     # Dreambooth Settings
     parser.add_argument("--with_prior_preservation",       default=False, action="store_true", help="Flag to add prior preservation loss.")
@@ -1659,8 +1660,7 @@ def main():
     vae.to(accelerator.device, dtype=weight_dtype)
     if args.use_ema == True:
         ema_unet.to(accelerator.device, dtype=weight_dtype)
-    if not args.train_text_encoder:
-        text_encoder.to(accelerator.device, dtype=weight_dtype)
+    text_encoder.to(accelerator.device, dtype=weight_dtype)
 
     if args.model_variant == 'inpainting':
         if args.use_bucketing:
@@ -1790,7 +1790,7 @@ def main():
     )
 
     if args.train_text_encoder and not args.use_ema:
-        if args.multi_gpu and accelerator.num_processes > 1:
+        if args.using_fsdp:
             unet, text_encoder = accelerator.prepare(
                 unet, text_encoder
             )
@@ -1802,17 +1802,41 @@ def main():
                 unet, text_encoder, optimizer, train_dataloader, lr_scheduler
             )
     elif args.train_text_encoder and args.use_ema:
-        unet, text_encoder, ema_unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-            unet, text_encoder, ema_unet, optimizer, train_dataloader, lr_scheduler
-        )
+        if args.using_fsdp:
+            unet, text_encoder, ema_unet = accelerator.prepare(
+                unet, text_encoder, ema_unet
+            )
+            optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                optimizer, train_dataloader, lr_scheduler
+            )
+        else:
+            optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                optimizer, train_dataloader, lr_scheduler
+            )
     elif not args.train_text_encoder and args.use_ema:
-        unet, ema_unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-            unet, ema_unet, optimizer, train_dataloader, lr_scheduler
-        )
+        if args.using_fsdp:
+            unet, ema_unet = accelerator.prepare(
+                unet, ema_unet
+            )
+            optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                optimizer, train_dataloader, lr_scheduler
+            )
+        else:
+            unet, ema_unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                unet, ema_unet, optimizer, train_dataloader, lr_scheduler
+            )
     elif not args.train_text_encoder and not args.use_ema:
-        unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-            unet, optimizer, train_dataloader, lr_scheduler
-        )
+        if args.using_fsdp:
+            unet = accelerator.prepare(
+                unet
+            )
+            optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                optimizer, train_dataloader, lr_scheduler
+            )
+        else:
+            optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                optimizer, train_dataloader, lr_scheduler
+            )
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = len(train_dataloader)
