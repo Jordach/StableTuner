@@ -1660,7 +1660,7 @@ def main():
     vae.to(accelerator.device, dtype=weight_dtype)
     if args.use_ema == True:
         ema_unet.to(accelerator.device, dtype=weight_dtype)
-    if not args.train_text_encoder
+    if not args.train_text_encoder:
         text_encoder.to(accelerator.device, dtype=weight_dtype)
 
     if args.model_variant == 'inpainting':
