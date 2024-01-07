@@ -2148,9 +2148,13 @@ def main():
                 # Clean up every 1% trained while under multi GPU mode while not in debug
                 if not e_steps % ((num_update_steps_per_epoch - 1) // 100) and args.multi_gpu:
                     if torch.cuda.is_available() and not args.debug_flag:
+                        # Wait for processes to sync up then clear cache
+                        accelerator.wait_for_everyone()
                         torch.cuda.empty_cache()
                         accelerator.free_memory()
                         gc.collect()
+                        # And do so afterwards to prevent any losses during training
+                        accelerator.wait_for_everyone()
 
                 if args.half_completion_upload and not args.save_every_quarter:
                     if not e_steps % (num_update_steps_per_epoch // 2):
