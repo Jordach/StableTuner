@@ -1424,7 +1424,7 @@ def main():
             text_encoder.gradient_checkpointing_enable()
 
     if args.scale_lr and args.multi_gpu:
-        args.learning_rate = args.learning_rate * math.sqrt(args.gradient_accumulation_steps * accelerator.num_processes)
+        args.learning_rate = args.learning_rate * ((args.train_batch_size * args.gradient_accumulation_steps * accelerator.num_processes) / args.train_batch_size)
         print(f"{bcolors.WARNING}LR rescaled to {args.learning_rate} for multiple GPU usage!{bcolors.ENDC}")
 
     # Use 8-bit Adam for lower memory usage or to fine-tune the model in 16GB GPUs
