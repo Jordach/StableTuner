@@ -2005,7 +2005,7 @@ def main():
             progress_bar_inter_epoch.reset(total=num_update_steps_per_epoch)
             e_steps = 0
             for step, batch in enumerate(train_dataloader):
-                with accelerator.accumulate(unet):
+                with accelerator.accumulate(unet, text_encoder):
                     # Convert images to latent space
                     with torch.no_grad():
                         latent_dist = batch[0][0]
