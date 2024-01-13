@@ -159,6 +159,7 @@ from diffusers.utils.import_utils import is_xformers_available
 from lion_pytorch import Lion
 import trainer_util as tu
 import subprocess
+import safetensors
 import requests
 import time
 
