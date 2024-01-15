@@ -1812,8 +1812,8 @@ def main():
                 optimizer, train_dataloader, lr_scheduler
             )
         else:
-            optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-                optimizer, train_dataloader, lr_scheduler
+            unet, text_encoder, ema_unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                unet, text_encoder, ema_unet, optimizer, train_dataloader, lr_scheduler
             )
     elif not args.train_text_encoder and args.use_ema:
         if args.using_fsdp:
@@ -1836,8 +1836,8 @@ def main():
                 optimizer, train_dataloader, lr_scheduler
             )
         else:
-            optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-                optimizer, train_dataloader, lr_scheduler
+            unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                unet, optimizer, train_dataloader, lr_scheduler
             )
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
@@ -2006,7 +2006,7 @@ def main():
             progress_bar_inter_epoch.reset(total=num_update_steps_per_epoch)
             e_steps = 0
             for step, batch in enumerate(train_dataloader):
-                with accelerator.accumulate(unet, text_encoder):
+                with accelerator.accumulate(unet, text_encoder) if args.train_text_encoder else accelerator.accumulate(unet):
                     # Convert images to latent space
                     with torch.no_grad():
                         latent_dist = batch[0][0]
