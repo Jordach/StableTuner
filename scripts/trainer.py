@@ -2063,6 +2063,8 @@ def main():
                                 hidden_states = encode['hidden_states'][-2] if args.clip_penultimate else encode['hidden_states'][-1]
                                 if args.using_fsdp:
                                     hidden_states = hidden_states.to(accelerator.device, dtype=torch.float32)
+                                else:
+                                    hidden_states = hidden_states.to(accelerator.device)
 
                                 if z is None:
                                     z = accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(hidden_states) if args.multi_gpu else text_encoder.text_model.final_layer_norm(hidden_states)
@@ -2071,17 +2073,18 @@ def main():
                                         
                                 del encode, hidden_states, chunk
                                 clamp_chunk += 1
+                            z = z.to(accelerator.device)
                             encoder_hidden_states = torch.stack(tuple(z))
+                            encoder_hidden_states = encoder_hidden_states.to(accelerator.device)
                             del n_batch, tru_len, max_chunks, max_len, z, chunks, clamp_chunk, clamp_event
 
                         else:
                             if args.clip_penultimate == True:
-                                encoder_hidden_states = text_encoder(batch[0][1],output_hidden_states=True)
+                                encoder_hidden_states = text_encoder(batch[0][1], output_hidden_states=True)
                                 encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
                             else:
                                 encoder_hidden_states = text_encoder(batch[0][1])[0]
-
-                        encoder_hidden_states = encoder_hidden_states.to(accelerator.device)
+                            encoder_hidden_states = encoder_hidden_states.to(accelerator.device)
 
                     # Predict the noise residual
                     model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
