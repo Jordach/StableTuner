@@ -2016,7 +2016,7 @@ def main():
                     noise = torch.randn_like(latents)
                     bsz = latents.shape[0]
                     # Sample a random timestep for each image
-                    timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
+                    timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=accelerator.device)
                     timesteps = timesteps.long()
 
                     if args.with_pertubation_noise:
@@ -2026,6 +2026,7 @@ def main():
                         # Add noise to the latents according to the noise magnitude at each timestep
                         # (this is the forward diffusion process)
                         noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+                    noisy_latents = noisy_latents.to(accelerator.device)
 
                     # Get the text embedding for conditioning
                     with text_enc_context:
@@ -2079,6 +2080,8 @@ def main():
                                 encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
                             else:
                                 encoder_hidden_states = text_encoder(batch[0][1])[0]
+
+                        encoder_hidden_states = encoder_hidden_states.to(accelerator.device)
 
                     # Predict the noise residual
                     model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
