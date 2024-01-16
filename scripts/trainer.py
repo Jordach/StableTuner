@@ -2117,13 +2117,11 @@ def main():
                     del timesteps, noise, latents, noisy_latents, encoder_hidden_states
 
                     accelerator.backward(loss)
-                    if accelerator.sync_gradients:
-                        params_to_clip = (
-                            itertools.chain(unet.parameters(), text_encoder.parameters())
-                            if args.train_text_encoder
-                            else unet.parameters()
-                        )
-                        accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
+                    # Do not bother with clipping gradients if max_grad_norm is zero
+                    if accelerator.sync_gradients and args.max_grad_norm > 0:
+                        accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)
+                        if args.train_text_encoder:
+                            accelerator.clip_grad_norm_(text_encoder.parameters(), args.max_grad_norm)
 
                     optimizer.step()
                     lr_scheduler.step()
