@@ -1213,9 +1213,9 @@ class CachedLatentsDataset(Dataset):
 
     def add_pt_cache(self, cache_path, dropout=False):
         if dropout:
-            self.cache_paths.append(Tuple(cache_path, True))
+            self.cache_paths.append(tuple(cache_path, True))
         else:
-            self.cache_paths.append(Tuple(cache_path, False))
+            self.cache_paths.append(tuple(cache_path, False))
 
 
 class LatentsDataset(Dataset):
