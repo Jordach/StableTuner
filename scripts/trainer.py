@@ -489,12 +489,14 @@ class AutoBucketing(Dataset):
             mx = I.max()
 
             mx -= mn
+            mn = I - mn
+            
             # Avoid division by zero
             if mn == 0:
                 mx = 0.003922
             if mx == 0:
                 mx = 0.003922
-            I = ((I - mn)/mx) * 255
+            I = (mn/mx) * 255
             return I.astype(np.uint8)
     def __get_image_for_trainer(self,image_train_item,debug_level=0,class_img=False):
         example = {}
