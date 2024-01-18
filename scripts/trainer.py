@@ -489,7 +489,11 @@ class AutoBucketing(Dataset):
             mx = I.max()
 
             mx -= mn
-
+            # Avoid division by zero
+            if mn == 0:
+                mx = 0.003922
+            if mx == 0:
+                mx = 0.003922
             I = ((I - mn)/mx) * 255
             return I.astype(np.uint8)
     def __get_image_for_trainer(self,image_train_item,debug_level=0,class_img=False):
@@ -1754,7 +1758,7 @@ def main():
     # Add unconditional batches
     if args.unconditional_dropout > 0:
         known_caches = cached_dataset.get_cache_list()
-        # Only add more caches 
+        # Only add more caches if there's more than 1 total latent batches
         if len(known_caches) > 2:
             additional_caches = random.sample(known_caches, int(known_caches-1 * args.unconditional_dropout))
             print(f"{bcolors.WARNING}Adding {len(additional_caches)} additional duplicate batches as unconditional guidance.{bcolors.ENDC}")
