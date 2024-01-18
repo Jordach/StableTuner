@@ -484,13 +484,14 @@ class AutoBucketing(Dataset):
         #print(example['instance_images'].shape)
         #print(example.keys())
         return example
+        
     def normalize8(self,I):
             mn = I.min()
             mx = I.max()
 
             mx -= mn
             mn = I - mn
-            
+
             # Avoid division by zero
             if mn == 0:
                 mx = 0.003922
@@ -498,6 +499,7 @@ class AutoBucketing(Dataset):
                 mx = 0.003922
             I = (mn/mx) * 255
             return I.astype(np.uint8)
+
     def __get_image_for_trainer(self,image_train_item,debug_level=0,class_img=False):
         example = {}
         save = debug_level > 2
