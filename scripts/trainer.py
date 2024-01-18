@@ -21,24 +21,25 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
 
     # Training Settings
-    parser.add_argument("--resolution",                    default=512, type=int, help="The resolution for input images, all the images in the train/validation dataset will be resized to this resolution")
-    parser.add_argument("--train_batch_size",              default=4, type=int, help="Batch size (per device) for the training dataloader.")
-    parser.add_argument("--num_train_epochs",              default=1, type=int)
-    parser.add_argument("--shuffle_per_epoch",             default=True, action="store_true", help="Will shffule the dataset per epoch")
-    parser.add_argument("--use_bucketing",                 default=False, action="store_true")
-    parser.add_argument("--seed",                          default=42, type=int, help="A seed for reproducible training.")
-    parser.add_argument("--learning_rate",                 default=5e-6, type=float, help="Initial learning rate (after the potential warmup period) to use.")
-    parser.add_argument("--lr_scheduler",                  default="constant", type=str, help='The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"]')
-    parser.add_argument("--lr_warmup_steps",               default=500, type=float, help="Number of steps for the warmup in the lr scheduler.")
-    parser.add_argument('--token_limit',                   default=75, type=int, help="Token limit, token lengths longer than the next multiple of 75 will be truncated.")
-    parser.add_argument('--epoch_seed',                    default=False, action="store_true")
-    parser.add_argument("--min_snr_gamma",                 default=None, type=float, help="gamma for reducing the weight of high loss timesteps. Lower numbers have stronger effect. 5 is recommended by paper.")
-    parser.add_argument('--with_pertubation_noise',        default=False, action="store_true")
-    parser.add_argument("--perturbation_noise_weight",     default=0.1, type=float, help="The weight of perturbation noise applied during training.")
-    parser.add_argument("--zero_terminal_snr",             default=False, action="store_true", help="Enables Zero Terminal SNR, see https://arxiv.org/pdf/2305.08891.pdf - requires --force_v_pred for non SD2.1 models")
-    parser.add_argument("--force_v_pred",                  default=False, action="store_true", help="Force enables V Prediction for models that don't officially support it - ie SD1.5")
-    parser.add_argument("--scale_v_pred_loss",             default=False, action="store_true", help="By scaling the loss according to the time step, the weights of global noise prediction and local noise prediction become the same, and the improvement of details may be expected.")
-    parser.add_argument("--conditional_dropout",           default=None, type=float, help="Conditional dropout probability")
+    parser.add_argument("--resolution",                default=512, type=int, help="The resolution for input images, all the images in the train/validation dataset will be resized to this resolution")
+    parser.add_argument("--train_batch_size",          default=4, type=int, help="Batch size (per device) for the training dataloader.")
+    parser.add_argument("--num_train_epochs",          default=1, type=int)
+    parser.add_argument("--shuffle_per_epoch",         default=True, action="store_true", help="Will shffule the dataset per epoch")
+    parser.add_argument("--use_bucketing",             default=False, action="store_true")
+    parser.add_argument("--seed",                      default=42, type=int, help="A seed for reproducible training.")
+    parser.add_argument("--learning_rate",             default=5e-6, type=float, help="Initial learning rate (after the potential warmup period) to use.")
+    parser.add_argument("--lr_scheduler",              default="constant", type=str, help='The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"]')
+    parser.add_argument("--lr_warmup_steps",           default=500, type=float, help="Number of steps for the warmup in the lr scheduler.")
+    parser.add_argument('--token_limit',               default=75, type=int, help="Token limit, token lengths longer than the next multiple of 75 will be truncated.")
+    parser.add_argument('--epoch_seed',                default=False, action="store_true")
+    parser.add_argument("--min_snr_gamma",             default=None, type=float, help="gamma for reducing the weight of high loss timesteps. Lower numbers have stronger effect. 5 is recommended by paper.")
+    parser.add_argument('--with_pertubation_noise',    default=False, action="store_true")
+    parser.add_argument("--perturbation_noise_weight", default=0.1, type=float, help="The weight of perturbation noise applied during training.")
+    parser.add_argument("--zero_terminal_snr",         default=False, action="store_true", help="Enables Zero Terminal SNR, see https://arxiv.org/pdf/2305.08891.pdf - requires --force_v_pred for non SD2.1 models")
+    parser.add_argument("--snr_debias",                default=False, action="store_true", help="Whether or not to debias timestep weighting during training, effectively replaces scale_v_pred_loss.")
+    parser.add_argument("--force_v_pred",              default=False, action="store_true", help="Force enables V Prediction for models that don't officially support it - ie SD1.5")
+    parser.add_argument("--scale_v_pred_loss",         default=False, action="store_true", help="By scaling the loss according to the time step, the weights of global noise prediction and local noise prediction become the same, and the improvement of details may be expected.")
+    parser.add_argument("--unconditional_dropout",     default=-1, type=float,             help="A percentage of batches to drop out. 0 uses none, 1 uses all of them. Use -1 to disable. Batches will be duplicated with 'empty' captions.")
 
     # Model Settings
     parser.add_argument("--model_variant",                 default='base', type=str, help="Train Base/Inpaint/Depth2Img")
@@ -60,52 +61,52 @@ def parse_args():
     parser.add_argument("--auto_balance_concept_datasets", default=False, action="store_true", help="will balance the number of images in each concept dataset to match the minimum number of images in any concept dataset")
     
     # Optimisations
-    parser.add_argument("--mixed_precision",               default="no", type=str, choices=["no", "fp16", "bf16","tf32"], help="Whether to use mixed precision. Choose between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10. and an Nvidia Ampere GPU.")
-    parser.add_argument("--attention",                     default="xformers", type=str, choices=["xformers", "flash_attention"], help="Type of attention to use.")
-    parser.add_argument('--disable_cudnn_benchmark',       default=True, action="store_true")
-    parser.add_argument("--gradient_accumulation_steps",   default=1, type=int, help="Number of updates steps to accumulate before performing a backward/update pass.")
-    parser.add_argument("--gradient_checkpointing",        default=False, action="store_true", help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.")
-    parser.add_argument("--scale_lr",                      default=False, action="store_true", help="Scale the learning rate by the number of active GPUs and gradient accumulation steps.")
-    parser.add_argument("--use_8bit_adam",                 default=False, action="store_true", help="Whether or not to use 8-bit Adam from bitsandbytes.")
-    parser.add_argument("--use_lion",                      default=False, action="store_true", help="Whether or not to use Lion.")
-    parser.add_argument("--adam_beta1",                    default=0.9, type=float, help="The beta1 parameter for the Adam optimizer.")
-    parser.add_argument("--adam_beta2",                    default=0.999, type=float, help="The beta2 parameter for the Adam optimizer.")
-    parser.add_argument("--adam_weight_decay",             default=1e-2, type=float, help="Weight decay to use.")
-    parser.add_argument("--adam_epsilon",                  default=1e-08, type=float, help="Epsilon value for the Adam optimizer")
-    parser.add_argument("--max_grad_norm",                 default=1.0, type=float, help="Max gradient norm.")
-    parser.add_argument("--use_deepspeed_adam",            default=False, action="store_true", help="Use experimental DeepSpeed Adam 8.")
-    parser.add_argument("--dataset_workers",               default=1, type=int, help="How many PyTorch threads should be used while preparing the dataset for latent caching.")
-    parser.add_argument("--dataset_prefetch",              default=2, type=int, help="How many batches should PyTorch preload while preparing the dataset for latent caching.")
+    parser.add_argument("--mixed_precision",             default="no", type=str, choices=["no", "fp16", "bf16","tf32"], help="Whether to use mixed precision. Choose between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10. and an Nvidia Ampere GPU.")
+    parser.add_argument("--attention",                   default="xformers", type=str, choices=["xformers", "flash_attention"], help="Type of attention to use.")
+    parser.add_argument('--disable_cudnn_benchmark',     default=True, action="store_true")
+    parser.add_argument("--gradient_accumulation_steps", default=1, type=int, help="Number of updates steps to accumulate before performing a backward/update pass.")
+    parser.add_argument("--gradient_checkpointing",      default=False, action="store_true", help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.")
+    parser.add_argument("--scale_lr",                    default=False, action="store_true", help="Scale the learning rate by the number of active GPUs and gradient accumulation steps.")
+    parser.add_argument("--use_8bit_adam",               default=False, action="store_true", help="Whether or not to use 8-bit Adam from bitsandbytes.")
+    parser.add_argument("--use_lion",                    default=False, action="store_true", help="Whether or not to use Lion.")
+    parser.add_argument("--adam_beta1",                  default=0.9, type=float, help="The beta1 parameter for the Adam optimizer.")
+    parser.add_argument("--adam_beta2",                  default=0.999, type=float, help="The beta2 parameter for the Adam optimizer.")
+    parser.add_argument("--adam_weight_decay",           default=1e-2, type=float, help="Weight decay to use.")
+    parser.add_argument("--adam_epsilon",                default=1e-08, type=float, help="Epsilon value for the Adam optimizer")
+    parser.add_argument("--max_grad_norm",               default=1.0, type=float, help="Max gradient norm.")
+    parser.add_argument("--use_deepspeed_adam",          default=False, action="store_true", help="Use experimental DeepSpeed Adam 8.")
+    parser.add_argument("--dataset_workers",             default=1, type=int, help="How many PyTorch threads should be used while preparing the dataset for latent caching.")
+    parser.add_argument("--dataset_prefetch",            default=2, type=int, help="How many batches should PyTorch preload while preparing the dataset for latent caching.")
 
     # Misc Settings
-    parser.add_argument("--save_every_n_epoch",            default=1, type=int, help="save on epoch finished")
-    parser.add_argument("--save_every_quarter",            default=False, action="store_true", help="Saves the current epoch for every 25% of all steps completed.")
-    parser.add_argument("--output_dir",                    default=None, type=str, required=True, help="The output directory where the model predictions and checkpoints will be written.")
-    parser.add_argument("--max_train_steps",               default=None, type=int, help="Total number of training steps to perform. If provided, overrides num_train_epochs.")
-    parser.add_argument("--regenerate_latent_cache",       default=False, action="store_true")
-    parser.add_argument('--use_latents_only',              default=False, action="store_true")
-    parser.add_argument("--logging_dir",                   default="logs", type=str, help="[TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to *output_dir/runs/**CURRENT_DATETIME_HOSTNAME***.")
-    parser.add_argument("--log_interval",                  default=10, type=int, help="Log every N steps.")
-    parser.add_argument("--overwite_csv_logs",             default=False, action="store_true", help="Overwrites a CSV containing loss, LR, current step, current epoch and a timestamp when starting a new training session.")
-    parser.add_argument("--local_rank",                    default=-1, type=int, help="For distributed training: local_rank")
-    parser.add_argument("--detect_full_drive",             default=True, action="store_true", help="Delete checkpoints when the drive is full.")
-    parser.add_argument("--multi_gpu",                     default=False, action="store_true", help="Enable this flag if you're using multi-GPU in HF Accelerate, otherwise, it's treated as a single GPU system.")
-    parser.add_argument("--using_fsdp",                    default=False, action="store_true", help="Enable this flag if you're using multi-GPU FSDP in HF Accelerate.")
+    parser.add_argument("--save_every_n_epoch",      default=1, type=int, help="save on epoch finished")
+    parser.add_argument("--save_every_quarter",      default=False, action="store_true", help="Saves the current epoch for every 25% of all steps completed.")
+    parser.add_argument("--output_dir",              default=None, type=str, required=True, help="The output directory where the model predictions and checkpoints will be written.")
+    parser.add_argument("--max_train_steps",         default=None, type=int, help="Total number of training steps to perform. If provided, overrides num_train_epochs.")
+    parser.add_argument("--regenerate_latent_cache", default=False, action="store_true")
+    parser.add_argument('--use_latents_only',        default=False, action="store_true")
+    parser.add_argument("--logging_dir",             default="logs", type=str, help="[TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to *output_dir/runs/**CURRENT_DATETIME_HOSTNAME***.")
+    parser.add_argument("--log_interval",            default=10, type=int, help="Log every N steps.")
+    parser.add_argument("--overwite_csv_logs",       default=False, action="store_true", help="Overwrites a CSV containing loss, LR, current step, current epoch and a timestamp when starting a new training session.")
+    parser.add_argument("--local_rank",              default=-1, type=int, help="For distributed training: local_rank")
+    parser.add_argument("--detect_full_drive",       default=True, action="store_true", help="Delete checkpoints when the drive is full.")
+    parser.add_argument("--multi_gpu",               default=False, action="store_true", help="Enable this flag if you're using multi-GPU in HF Accelerate, otherwise, it's treated as a single GPU system.")
+    parser.add_argument("--using_fsdp",              default=False, action="store_true", help="Enable this flag if you're using multi-GPU FSDP in HF Accelerate.")
 
     # Dreambooth Settings
-    parser.add_argument("--with_prior_preservation",       default=False, action="store_true", help="Flag to add prior preservation loss.")
-    parser.add_argument("--prior_loss_weight",             default=1.0, type=float, help="The weight of prior preservation loss.")
-    parser.add_argument("--num_class_images",              default=100, type=int, help="Minimal class images for prior preservation loss. If not have enough images, additional images will be sampled with class_prompt.")
+    parser.add_argument("--with_prior_preservation", default=False, action="store_true", help="Flag to add prior preservation loss.")
+    parser.add_argument("--prior_loss_weight",       default=1.0, type=float, help="The weight of prior preservation loss.")
+    parser.add_argument("--num_class_images",        default=100, type=int, help="Minimal class images for prior preservation loss. If not have enough images, additional images will be sampled with class_prompt.")
 
     # Legacy Settings
-    parser.add_argument("--center_crop",                   default=False, action="store_true", help="Whether to center crop images before resizing to resolution")
-    parser.add_argument("--instance_data_dir",             default=None, type=str, help="A folder containing the training data of instance images.")
-    parser.add_argument("--instance_prompt",               default=None, type=str, help="The prompt with identifier specifying the instance")
-    parser.add_argument("--class_data_dir",                default=None, type=str, help="A folder containing the training data of class images.")
-    parser.add_argument("--class_prompt",                  default=None, type=str, help="The prompt to specify images in the same class as provided instance images.")
-    parser.add_argument('--add_mask_prompt',               default=None, type=str, action="append", dest="mask_prompts")
-    parser.add_argument("--sample_batch_size",             default=4, type=int, help="Batch size (per device) for sampling images.")
-    parser.add_argument("--add_class_images_to_dataset",   default=False, action="store_true", help="will generate and add class images to the dataset without using prior reservation in training")
+    parser.add_argument("--center_crop",                 default=False, action="store_true", help="Whether to center crop images before resizing to resolution")
+    parser.add_argument("--instance_data_dir",           default=None, type=str, help="A folder containing the training data of instance images.")
+    parser.add_argument("--instance_prompt",             default=None, type=str, help="The prompt with identifier specifying the instance")
+    parser.add_argument("--class_data_dir",              default=None, type=str, help="A folder containing the training data of class images.")
+    parser.add_argument("--class_prompt",                default=None, type=str, help="The prompt to specify images in the same class as provided instance images.")
+    parser.add_argument('--add_mask_prompt',             default=None, type=str, action="append", dest="mask_prompts")
+    parser.add_argument("--sample_batch_size",           default=4, type=int, help="Batch size (per device) for sampling images.")
+    parser.add_argument("--add_class_images_to_dataset", default=False, action="store_true", help="will generate and add class images to the dataset without using prior reservation in training")
     
     # Project Settings
     parser.add_argument("--project_name",                    default="model", type=str, help="The model name prefix. IE: yourmodel_rev_1")
@@ -1165,25 +1166,21 @@ class PromptDataset(Dataset):
 
 class CachedLatentsDataset(Dataset):
     #stores paths and loads latents on the fly
-    def __init__(self, cache_paths=(),batch_size=None,tokenizer=None,text_encoder=None,dtype=None,model_variant='base',shuffle_per_epoch=False,args=None):
+    def __init__(self, cache_paths=[],batch_size=None,tokenizer=None,text_encoder=None,dtype=None,model_variant='base',shuffle_per_epoch=False,args=None,accelerator=None):
         self.cache_paths = cache_paths
         self.tokenizer = tokenizer
         self.args = args
         self.text_encoder = text_encoder
+        self.accelerator = accelerator
         #get text encoder device
         text_encoder_device = next(self.text_encoder.parameters()).device
         self.empty_batch = [self.tokenizer('',padding="do_not_pad",truncation=True,max_length=self.tokenizer.model_max_length,).input_ids for i in range(batch_size)]
         #handle text encoder for empty tokens
-        if self.args.train_text_encoder != True:
-            self.empty_tokens = tokenizer.pad({"input_ids": self.empty_batch},padding="max_length",max_length=tokenizer.model_max_length,return_tensors="pt",).to(text_encoder_device).input_ids
-            self.empty_tokens.to(text_encoder_device, dtype=dtype)
+        self.empty_tokens = tokenizer.pad({"input_ids": self.empty_batch},padding="max_length",max_length=tokenizer.model_max_length,return_tensors="pt",).to(accelerator.device).input_ids
+        self.empty_tokens.to(accelerator.device, dtype=dtype)
+        if not args.train_text_encoder:
             self.empty_tokens = self.text_encoder(self.empty_tokens)[0]
-        else:
-            self.empty_tokens = tokenizer.pad({"input_ids": self.empty_batch},padding="max_length",max_length=tokenizer.model_max_length,return_tensors="pt",).input_ids
-            self.empty_tokens.to(text_encoder_device, dtype=dtype)
 
-        self.conditional_dropout = args.conditional_dropout
-        self.conditional_indexes = []
         self.model_variant = model_variant
         self.shuffle_per_epoch = shuffle_per_epoch
     def __len__(self):
@@ -1191,53 +1188,33 @@ class CachedLatentsDataset(Dataset):
     def __getitem__(self, index):
         if index == 0:
             if self.shuffle_per_epoch == True:
-                self.cache_paths = tuple(random.sample(self.cache_paths, len(self.cache_paths)))
-            if len(self.cache_paths) > 1:
-                possible_indexes_extension = None
-                possible_indexes = list(range(0,len(self.cache_paths)))
-                #conditional dropout is a percentage of images to drop from the total cache_paths
-                if self.conditional_dropout != None:
-                    if len(self.conditional_indexes) == 0:
-                        self.conditional_indexes = random.sample(possible_indexes, k=int(math.ceil(len(possible_indexes)*self.conditional_dropout)))
-                    else:
-                        #pick indexes from the remaining possible indexes
-                        possible_indexes_extension = [i for i in possible_indexes if i not in self.conditional_indexes]
-                        #duplicate all values in possible_indexes_extension
-                        possible_indexes_extension = possible_indexes_extension + possible_indexes_extension
-                        possible_indexes_extension = possible_indexes_extension + self.conditional_indexes
-                        self.conditional_indexes = random.sample(possible_indexes_extension, k=int(math.ceil(len(possible_indexes)*self.conditional_dropout)))
-                        #check for duplicates in conditional_indexes values
-                        if len(self.conditional_indexes) != len(set(self.conditional_indexes)):
-                            #remove duplicates
-                            self.conditional_indexes_non_dupe = list(set(self.conditional_indexes))
-                            #add a random value from possible_indexes_extension for each duplicate
-                            for i in range(len(self.conditional_indexes) - len(self.conditional_indexes_non_dupe)):
-                                while True:
-                                    random_value = random.choice(possible_indexes_extension)
-                                    if random_value not in self.conditional_indexes_non_dupe:
-                                        self.conditional_indexes_non_dupe.append(random_value)
-                                        break
-                            self.conditional_indexes = self.conditional_indexes_non_dupe
-        self.cache = torch.load(self.cache_paths[index])
+                self.cache_paths = List(random.sample(self.cache_paths, len(self.cache_paths)))
+
+        self.cache = torch.load(self.cache_paths[index][0])
         self.latents = self.cache.latents_cache[0]
         self.tokens = self.cache.tokens_cache[0]
         self.conditioning_latent_cache = None
         self.extra_cache = None
-        if index in self.conditional_indexes:
-            self.text_encoder = self.empty_tokens
+        if self.cache_paths[index][1]:
+            self.text_encoder = self.empty_tokens.to(self.accelerator.device)
         else:
-            self.text_encoder = self.cache.text_encoder_cache[0]
+            self.text_encoder = self.cache.text_encoder_cache[0].to(self.accelerator.device)
+
         if self.model_variant != 'base':
             self.conditioning_latent_cache = self.cache.conditioning_latent_cache[0]
             self.extra_cache = self.cache.extra_cache[0]
         del self.cache
         return self.latents, self.text_encoder, self.conditioning_latent_cache, self.extra_cache, self.tokens
 
-    def add_pt_cache(self, cache_path):
-        if len(self.cache_paths) == 0:
-            self.cache_paths = (cache_path,)
+    def get_cache_list(self):
+        return self.cache_paths
+
+    def add_pt_cache(self, cache_path, dropout=False):
+        if dropout:
+            self.cache_paths.append(Tuple(cache_path, True))
         else:
-            self.cache_paths += (cache_path,)
+            self.cache_paths.append(Tuple(cache_path, False))
+
 
 class LatentsDataset(Dataset):
     def __init__(self, latents_cache=None, text_encoder_cache=None, conditioning_latent_cache=None, extra_cache=None, tokens_cache=None):
@@ -1677,7 +1654,8 @@ def main():
     dtype=weight_dtype,
     model_variant=args.model_variant,
     shuffle_per_epoch=args.shuffle_per_epoch,
-    args = args,)
+    args = args,
+    accelerator=accelerator)
     if args.shuffle_per_epoch:
         print(f"{bcolors.WARNING}Will shuffle Latent Caches.{bcolors.ENDC}")
 
@@ -1727,6 +1705,7 @@ def main():
             #load all the cached latents into a single dataset
             for i in range(0,data_len-1):
                 cached_dataset.add_pt_cache(os.path.join(latent_cache_dir,f"latents_cache_{i}.pt"))
+            
         if gen_cache == True:
             #delete all the cached latents if they exist to avoid problems
             print(f"{bcolors.WARNING}Generating latents cache...{bcolors.ENDC}")
@@ -1771,7 +1750,22 @@ def main():
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
-        #load all the cached latents into a single dataset
+   
+    # Add unconditional batches
+    if args.unconditional_dropout > 0:
+        known_caches = cached_dataset.get_cache_list()
+        # Only add more caches 
+        if len(known_caches) > 2:
+            additional_caches = random.sample(known_caches, int(known_caches-1 * args.unconditional_dropout))
+            print(f"{bcolors.WARNING}Adding {len(additional_caches)} additional duplicate batches as unconditional guidance.{bcolors.ENDC}")
+            for duplicate_cache in additional_caches:
+                print(duplicate_cache)
+                cached_dataset.add_pt_cache(duplicate_cache[0], dropout=True)
+                data_len += 1
+            del additional_caches
+            del known_caches
+
+    # Prepare the torch dataloader
     train_dataloader = torch.utils.data.DataLoader(cached_dataset, batch_size=1, collate_fn=lambda x: x, shuffle=False)
     print(f"{bcolors.OKGREEN}Latents are ready.{bcolors.ENDC}")
     # Scheduler and math around the number of training steps.
@@ -1950,6 +1944,7 @@ def main():
 
     global_step = 0
     loss_avg = AverageMeter()
+    nat_loss_avg = AverageMeter()
     text_enc_context = nullcontext() if args.train_text_encoder else torch.no_grad()
 
     try:
@@ -1982,6 +1977,12 @@ def main():
 
         get_unet_noise = tu.predict_unet_noise
         get_loss = tu.get_batch_loss
+
+        are_we_v_pred = False
+        if args.force_v_pred:
+            are_we_v_pred = True
+        elif noise_scheduler.config.prediction_type == "v_prediction":
+            are_we_v_pred = True
 
         for epoch in range(args.num_train_epochs):
             model_outputs = 0
@@ -2097,43 +2098,46 @@ def main():
                     else:
                         raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
 
-                    if args.min_snr_gamma:
-                        are_we_v_pred = False
-                        if args.force_v_pred:
-                            are_we_v_pred = True
-                        elif noise_scheduler.config.prediction_type == "v_prediction":
-                            are_we_v_pred = True
+                    if args.multi_gpu:
+                        target = target.to(accelerator.device)
+                        model_pred = model_pred.to(accelerator.device)
 
-                        if args.multi_gpu:
-                            target = target.to(accelerator.device)
-                            model_pred = model_pred.to(accelerator.device)
-                        loss = (target.float() - model_pred.float()) ** 2
-                        loss = loss.mean([1, 2, 3])
-                        loss = tu.apply_snr_weight_neo(are_we_v_pred, loss.float(), timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
-                        loss = loss.mean()
-                    else:
-                        loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                    natural_loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
+                    natural_loss = natural_loss.mean([1, 2, 3])
+                    loss = natural_loss.clone().detach()
+
+                    if args.min_snr_gamma:
+                        loss = tu.apply_snr_weight_neo(are_we_v_pred, natural_loss.float(), timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
+                    elif args.snr_debias:
+                        loss = tu.snr_debias(are_we_v_pred, natural_loss.float(), timesteps, noise_scheduler, accelerator)
+
+                    natural_loss = natural_loss.mean()
+                    loss = loss.mean()
                     
                     del timesteps, noise, latents, noisy_latents, encoder_hidden_states
-
                     accelerator.backward(loss)
+
                     # Do not bother with clipping gradients if max_grad_norm is zero
                     if accelerator.sync_gradients and args.max_grad_norm > 0:
-                        accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)
-                        if args.train_text_encoder:
-                            accelerator.clip_grad_norm_(text_encoder.parameters(), args.max_grad_norm)
+                        params_to_clip = (itertools.chain(unet.parameters(), text_encoder.parameters()) if args.train_text_encoder else unet.parameters())
+                        accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
 
                     optimizer.step()
                     lr_scheduler.step()
                     optimizer.zero_grad()
+                    
                     loss_avg.update(loss.detach_(), bsz)
-                    del loss
+                    nat_loss_avg.update(natural_loss.detach_(), bsz)
+                    del loss, natural_loss
 
-                    if args.use_ema == True:
+                    if args.use_ema:
                         ema_unet.step(unet.parameters())
 
                 if not global_step % args.log_interval:
-                    logs = {"loss": loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
+                    if args.min_snr_gamma or args.snr_debias:
+                        logs = {"loss": loss_avg.avg.item(), "nat loss": nat_loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
+                    else:
+                        logs = {"loss": loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
                     progress_bar.set_postfix(**logs)
                     accelerator.log(logs, step=global_step)
                     del logs
@@ -2150,6 +2154,7 @@ def main():
                         torch.cuda.memory._record_memory_history(enabled=None)
                     except:
                         pass
+                    
                 # Clean up every 1% trained while under multi GPU mode while not in debug
                 if not e_steps % ((num_update_steps_per_epoch - 1) // 100) and args.multi_gpu:
                     if torch.cuda.is_available() and not args.debug_flag:

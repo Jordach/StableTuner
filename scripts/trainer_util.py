@@ -258,6 +258,16 @@ def exists(val):
 def default(val, d):
     return val if exists(val) else d
 
+# Debaise noise timesteps with SNR
+def snr_debias(is_v_prediction, loss, timesteps, noise_scheduler, accelerator):
+    snr = torch.stack([noise_scheduler.all_snr[t] for t in timesteps])
+    if is_v_prediction:
+        weight = 1 / (snr + 1)
+    else:
+        weight = 1 / torch.sqrt(snr)
+    new_loss = weight * loss
+    return new_loss.to(accelerator.device)
+
 # Min SNR related:
 def apply_snr_weight_neo(is_v_prediction, loss, timesteps, noise_scheduler, gamma, accelerator):
     snr = torch.stack([noise_scheduler.all_snr[t] for t in timesteps])
@@ -266,9 +276,9 @@ def apply_snr_weight_neo(is_v_prediction, loss, timesteps, noise_scheduler, gamm
         snr_weight = torch.div(min_snr_gamma, snr + 1).float().to(accelerator.device)
     else:
         snr_weight = torch.div(min_snr_gamma, snr).float().to(accelerator.device)
-    loss = loss * snr_weight#
+    new_loss = loss * snr_weight
     del min_snr_gamma, snr_weight, snr
-    return loss.to(accelerator.device)
+    return new_loss.to(accelerator.device)
 
 # Zero SNR related:
 def prepare_scheduler_for_custom_training(noise_scheduler, device):

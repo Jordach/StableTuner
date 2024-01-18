@@ -72,7 +72,8 @@ register_arg("perturbation_noise_weight", 0.1, "float", "The weight of pertubati
 register_arg("zero_terminal_snr", False, "bool", "Enables Zero Terminal SNR, see https://arxiv.org/pdf/2305.08891.pdf - requires force_v_pred for non SD2.1 models.")
 register_arg("force_v_pred", False, "bool", "Force enables V Prediction for models that don't officially support it - ie SD1.x.")
 register_arg("scale_v_pred_loss", False, "bool", "By scaling the loss according to the time step, the weights of global noise prediction and local noise prediction become the same, and the improvement of details may be expected.")
-register_arg("conditional_dropout", -1, "float", "A percentage of batches to drop out. 0 uses none, 1 uses all of them. Use none to disable. Text encoder and unet are not trained with captions when dropped out.")
+register_arg("snr_debias", False, "bool", "Whether or not to debias timestep weighting during training, effectively replaces scale_v_pred_loss.")
+register_arg("unconditional_dropout", -1, "float", "A percentage of batches to drop out. 0 uses none, 1 uses all of them. Use -1 to disable. Batches will be duplicated with 'empty' captions.")
 
 # Model Settings
 st_comments["header2"] = "Model Settings:"
