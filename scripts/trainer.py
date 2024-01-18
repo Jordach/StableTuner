@@ -1180,8 +1180,6 @@ class CachedLatentsDataset(Dataset):
         #handle text encoder for empty tokens
         self.empty_tokens = tokenizer.pad({"input_ids": self.empty_batch},padding="max_length",max_length=tokenizer.model_max_length,return_tensors="pt",).to(accelerator.device).input_ids
         self.empty_tokens.to(accelerator.device, dtype=dtype)
-        if not args.train_text_encoder:
-            self.empty_tokens = self.text_encoder(self.empty_tokens)[0]
 
         self.model_variant = model_variant
         self.shuffle_per_epoch = shuffle_per_epoch
