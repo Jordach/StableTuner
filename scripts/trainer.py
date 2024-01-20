@@ -1174,13 +1174,11 @@ class CachedLatentsDataset(Dataset):
         self.args = args
         self.text_encoder = text_encoder
         self.accelerator = accelerator
-        #get text encoder device
-        text_encoder_device = next(self.text_encoder.parameters()).device
         self.empty_batch = [self.tokenizer('',padding="do_not_pad",truncation=True,max_length=self.tokenizer.model_max_length,).input_ids for i in range(batch_size)]
         #handle text encoder for empty tokens
-        self.empty_tokens = tokenizer.pad({"input_ids": self.empty_batch},padding="max_length",max_length=tokenizer.model_max_length,return_tensors="pt",).to(accelerator.device).input_ids
-        self.empty_tokens.to(accelerator.device, dtype=dtype)
-
+        self.empty_tokens = tokenizer.pad({"input_ids": self.empty_batch},padding="max_length",max_length=tokenizer.model_max_length,return_tensors="pt",).input_ids
+        with torch.no_grad():
+            self.empty_embed = self.text_encoder(self.empty_tokens)[0]
 
         self.model_variant = model_variant
         self.shuffle_per_epoch = shuffle_per_epoch
@@ -1196,17 +1194,17 @@ class CachedLatentsDataset(Dataset):
         self.tokens = self.cache.tokens_cache[0]
         self.conditioning_latent_cache = None
         self.extra_cache = None
+        self.text_encoding = None
         if self.cache_paths[index][1]:
-            with torch.no_grad():
-                self.text_encoder = [self.text_encoder(self.empty_tokens)[0], True]
+            self.text_encoding = [self.empty_embed, True]
         else:
-            self.text_encoder = [self.cache.text_encoder_cache[0].to(self.accelerator.device), False]
+            self.text_encoding = [self.cache.text_encoder_cache[0].to(self.accelerator.device), False]
 
         if self.model_variant != 'base':
             self.conditioning_latent_cache = self.cache.conditioning_latent_cache[0]
             self.extra_cache = self.cache.extra_cache[0]
         del self.cache
-        return self.latents, self.text_encoder, self.conditioning_latent_cache, self.extra_cache, self.tokens
+        return self.latents, self.text_encoding, self.conditioning_latent_cache, self.extra_cache, self.tokens
 
     def get_cache_list(self):
         return self.cache_paths
