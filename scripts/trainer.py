@@ -1181,6 +1181,7 @@ class CachedLatentsDataset(Dataset):
         self.empty_tokens = tokenizer.pad({"input_ids": self.empty_batch},padding="max_length",max_length=tokenizer.model_max_length,return_tensors="pt",).to(accelerator.device).input_ids
         self.empty_tokens.to(accelerator.device, dtype=dtype)
 
+
         self.model_variant = model_variant
         self.shuffle_per_epoch = shuffle_per_epoch
     def __len__(self):
@@ -1196,9 +1197,10 @@ class CachedLatentsDataset(Dataset):
         self.conditioning_latent_cache = None
         self.extra_cache = None
         if self.cache_paths[index][1]:
-            self.text_encoder = self.empty_tokens.to(self.accelerator.device)
+            with torch.no_grad():
+                self.text_encoder = [self.text_encoder(self.empty_tokens)[0], True]
         else:
-            self.text_encoder = self.cache.text_encoder_cache[0].to(self.accelerator.device)
+            self.text_encoder = [self.cache.text_encoder_cache[0].to(self.accelerator.device), False]
 
         if self.model_variant != 'base':
             self.conditioning_latent_cache = self.cache.conditioning_latent_cache[0]
@@ -2015,63 +2017,64 @@ def main():
                         noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
                     noisy_latents = noisy_latents.to(accelerator.device)
 
-                    # Get the text embedding for conditioning
-                    with text_enc_context:
-                        tru_len = max(len(x) for x in batch[0][1])
-                        max_chunks = np.ceil(tru_len / max_standard_tokens).astype(int)
-                        max_len = max_chunks.item() * max_standard_tokens
-                        clamp_event = False
-                        #print(f"\n\n\nC:{max_chunks}, L:{max_len}, T:{tru_len}")
-                        # If we're a properly padded bunch of tokens that have come from the tokeniser padder, train normally;
-                        # otherwise we're handling a dropout batch, and thusly need to handle it the normal way. 
-                        if tru_len == max_len and max_chunks > 1:
-                            # Duplicate batch tensor to prevent irreparably damaging it's token data
-                            # Recommended over torch.tensor()
-                            n_batch = batch[0][1].clone().detach()
-                            z = None
-                            for i, x in enumerate(n_batch):
-                                if len(x) < max_len:
-                                    n_batch[i] = [*x, *np.full((max_len - len(x)), tokenizer.eos_token_id)]
-                                del i
-                                del x
+                    if not batch[0][1][1]:
+                        # Get the text embedding for conditioning
+                        with text_enc_context:
+                            tru_len = max(len(x) for x in batch[0][1][0])
+                            max_chunks = np.ceil(tru_len / max_standard_tokens).astype(int)
+                            max_len = max_chunks.item() * max_standard_tokens
+                            clamp_event = False
+                            #print(f"\n\n\nC:{max_chunks}, L:{max_len}, T:{tru_len}")
+                            # If we're a properly padded bunch of tokens that have come from the tokeniser padder, train normally;
+                            # otherwise we're handling a dropout batch, and thusly need to handle it the normal way. 
+                            if tru_len == max_len and max_chunks > 1:
+                                # Duplicate batch tensor to prevent irreparably damaging it's token data
+                                # Recommended over torch.tensor()
+                                n_batch = batch[0][1][0].clone().detach()
+                                z = None
+                                for i, x in enumerate(n_batch):
+                                    if len(x) < max_len:
+                                        n_batch[i] = [*x, *np.full((max_len - len(x)), tokenizer.eos_token_id)]
+                                    del i
+                                    del x
 
-                            chunks = [n_batch[:, i:i + max_standard_tokens] for i in range(0, max_len, max_standard_tokens)]
-                            clamp_chunk = 0
-                            for chunk in chunks:
-                                # Hard limit the tokens to fit in memory for the rare event that latent caches that somehow exceed the limit.
-                                if clamp_chunk > (token_chunks_limit):
-                                    del chunk
-                                    break
+                                chunks = [n_batch[:, i:i + max_standard_tokens] for i in range(0, max_len, max_standard_tokens)]
+                                clamp_chunk = 0
+                                for chunk in chunks:
+                                    # Hard limit the tokens to fit in memory for the rare event that latent caches that somehow exceed the limit.
+                                    if clamp_chunk > (token_chunks_limit):
+                                        del chunk
+                                        break
 
-                                chunk = chunk.to(accelerator.device)
-                                chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1)
-                                encode = accelerator.unwrap_model(text_encoder)(chunk, output_hidden_states=True) if args.multi_gpu else text_encoder(chunk, output_hidden_states=True)
+                                    chunk = chunk.to(accelerator.device)
+                                    chunk = torch.cat((torch.full((chunk.shape[0], 1), tokenizer.bos_token_id).to(accelerator.device), chunk, torch.full((chunk.shape[0], 1), tokenizer.eos_token_id).to(accelerator.device)), 1)
+                                    encode = accelerator.unwrap_model(text_encoder)(chunk, output_hidden_states=True) if args.multi_gpu else text_encoder(chunk, output_hidden_states=True)
 
-                                hidden_states = encode['hidden_states'][-2] if args.clip_penultimate else encode['hidden_states'][-1]
-                                if args.using_fsdp:
-                                    hidden_states = hidden_states.to(accelerator.device, dtype=torch.float32)
-                                else:
-                                    hidden_states = hidden_states.to(accelerator.device)
+                                    hidden_states = encode['hidden_states'][-2] if args.clip_penultimate else encode['hidden_states'][-1]
+                                    if args.using_fsdp:
+                                        hidden_states = hidden_states.to(accelerator.device, dtype=torch.float32)
+                                    else:
+                                        hidden_states = hidden_states.to(accelerator.device)
 
-                                if z is None:
-                                    z = accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(hidden_states) if args.multi_gpu else text_encoder.text_model.final_layer_norm(hidden_states)
-                                else:
-                                    z = torch.cat((z, accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(hidden_states)), dim=-2) if args.multi_gpu else torch.cat((z, text_encoder.text_model.final_layer_norm(hidden_states)), dim=-2)
-                                        
-                                del encode, hidden_states, chunk
-                                clamp_chunk += 1
-                            z = z.to(accelerator.device)
-                            encoder_hidden_states = torch.stack(tuple(z))
-                            encoder_hidden_states = encoder_hidden_states.to(accelerator.device)
-                            del n_batch, tru_len, max_chunks, max_len, z, chunks, clamp_chunk, clamp_event
+                                    if z is None:
+                                        z = accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(hidden_states) if args.multi_gpu else text_encoder.text_model.final_layer_norm(hidden_states)
+                                    else:
+                                        z = torch.cat((z, accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(hidden_states)), dim=-2) if args.multi_gpu else torch.cat((z, text_encoder.text_model.final_layer_norm(hidden_states)), dim=-2)
+                                            
+                                    del encode, hidden_states, chunk
+                                    clamp_chunk += 1
+                                z = z.to(accelerator.device)
+                                encoder_hidden_states = torch.stack(tuple(z))
+                                encoder_hidden_states = encoder_hidden_states.to(accelerator.device)
+                                del n_batch, tru_len, max_chunks, max_len, z, chunks, clamp_chunk, clamp_event
 
-                        else:
-                            if args.clip_penultimate == True:
-                                encoder_hidden_states = text_encoder(batch[0][1], output_hidden_states=True)
-                                encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
                             else:
-                                encoder_hidden_states = text_encoder(batch[0][1])[0]
-                            encoder_hidden_states = encoder_hidden_states.to(accelerator.device)
+                                if args.clip_penultimate == True:
+                                    encoder_hidden_states = text_encoder(batch[0][1][0], output_hidden_states=True)
+                                    encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
+                                else:
+                                    encoder_hidden_states = text_encoder(batch[0][1][0])[0]
+                                encoder_hidden_states = encoder_hidden_states.to(accelerator.device)
 
                     # Predict the noise residual
                     model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
