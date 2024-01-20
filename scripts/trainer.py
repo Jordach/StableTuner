@@ -2104,7 +2104,7 @@ def main():
                     natural_loss = natural_loss.mean([1, 2, 3])
                     loss = natural_loss.clone().detach()
 
-                    if args.min_snr_gamma:
+                    if args.scale_v_pred_loss:
                         loss = tu.apply_snr_weight_neo(are_we_v_pred, natural_loss.float(), timesteps, noise_scheduler, args.min_snr_gamma, accelerator)
                     elif args.snr_debias:
                         loss = tu.snr_debias(are_we_v_pred, natural_loss.float(), timesteps, noise_scheduler, accelerator)
@@ -2132,8 +2132,10 @@ def main():
                         ema_unet.step(unet.parameters())
 
                 if not global_step % args.log_interval:
-                    if args.min_snr_gamma or args.snr_debias:
-                        logs = {"lossmod": loss_avg.avg.item(), "loss": nat_loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
+                    if args.scale_v_pred_loss:
+                        logs = {"loss_v": loss_avg.avg.item(), "loss": nat_loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
+                    elif args.snr_debias:
+                        logs = {"loss_snr": loss_avg.avg.item(), "loss": nat_loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
                     else:
                         logs = {"loss": loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
                     progress_bar.set_postfix(**logs)
@@ -2146,12 +2148,12 @@ def main():
                 global_step += 1
                 e_steps += 1
 
-                if e_steps == 400 and args.debug_flag:
-                    try:
-                        torch.cuda.memory._dump_snapshot(torch_mem_output)
-                        torch.cuda.memory._record_memory_history(enabled=None)
-                    except:
-                        pass
+                # if e_steps == 400 and args.debug_flag:
+                #     try:
+                #         torch.cuda.memory._dump_snapshot(torch_mem_output)
+                #         torch.cuda.memory._record_memory_history(enabled=None)
+                #     except:
+                #         pass
                     
                 # Clean up every 1% trained while under multi GPU mode while not in debug
                 if args.multi_gpu and num_update_steps_per_epoch > 100:
