@@ -2081,7 +2081,7 @@ def main():
                         with torch.no_grad():
                             if args.clip_penultimate == True:
                                 encoder_hidden_states = text_encoder(batch[0][1][0].to(accelerator.device), output_hidden_states=True)
-                                encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states)
+                                encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
                             else:
                                 encoder_hidden_states = text_encoder(batch[0][1][0].to(accelerator.device))[0]
 
