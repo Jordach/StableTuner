@@ -1759,7 +1759,6 @@ def main():
             additional_caches = random.sample(known_caches, int( (len(known_caches)-1) * args.unconditional_dropout))
             print(f"{bcolors.WARNING}Adding {len(additional_caches)} additional duplicate batches as unconditional guidance.{bcolors.ENDC}")
             for duplicate_cache in additional_caches:
-                print(duplicate_cache)
                 cached_dataset.add_pt_cache(duplicate_cache[0], dropout=True)
                 data_len += 1
             del additional_caches
@@ -2007,7 +2006,7 @@ def main():
             progress_bar_inter_epoch.reset(total=num_update_steps_per_epoch)
             e_steps = 0
             for step, batch in enumerate(train_dataloader):
-                with accelerator.accumulate(unet, text_encoder) if args.train_text_encoder else accelerator.accumulate(unet):
+                with accelerator.accumulate(unet, text_encoder) if args.train_text_encoder and args.gradient_accumulation_steps > 1 else accelerator.accumulate(unet):
                     # Convert images to latent space
                     with torch.no_grad():
                         latent_dist = batch[0][0]
