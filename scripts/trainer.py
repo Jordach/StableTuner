@@ -1848,16 +1848,7 @@ def main():
         accelerator.init_trackers("dreambooth")
     # Train!
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
-
-    logger.info("***** Running training *****")
-    if not args.use_latents_only:
-        logger.info(f"  Num examples = {len(train_dataset)}")
-    logger.info(f"Num batches each epoch = {len(train_dataloader)}")
-    logger.info(f"Num Epochs = {args.num_train_epochs}")
-    logger.info(f"Instantaneous batch size per device = {args.train_batch_size}")
-    logger.info(f"Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
-    logger.info(f"Gradient Accumulation steps = {args.gradient_accumulation_steps}")
-    logger.info(f"Total optimization steps = {args.max_train_steps}")
+    
     def save_and_sample_weights(step,context='checkpoint',save_model=True, auto_upload=False, complete=True):
         try:
             # Create the pipeline using using the trained modules and save it.
