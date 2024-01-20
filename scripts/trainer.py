@@ -2019,8 +2019,8 @@ def main():
                         noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
                     noisy_latents = noisy_latents.to(accelerator.device)
 
+                    # Get the text embedding for conditioning if it's not a dropout batch
                     if not batch[0][1][1]:
-                        # Get the text embedding for conditioning
                         with text_enc_context:
                             tru_len = max(len(x) for x in batch[0][1][0])
                             max_chunks = np.ceil(tru_len / max_standard_tokens).astype(int)
