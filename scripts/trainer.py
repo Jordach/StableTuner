@@ -1195,13 +1195,7 @@ class CachedLatentsDataset(Dataset):
         self.extra_cache = None
         self.text_encoding = None
         if self.cache_paths[index][1]:
-            with torch.no_grad():
-                if args.clip_penultimate == True:
-                    self.hidden_states = self.text_encoder(self.empty_tokens.to(self.accelerator.device), output_hidden_states=True)
-                    self.empty_embed = self.text_encoder.text_model.final_layer_norm(self.hidden_states['hidden_states'][-2].to(self.accelerator.device))
-                else:
-                    self.empty_embed = self.text_encoder(self.empty_tokens)[0]
-            self.text_encoding = [self.empty_embed.to(self.accelerator.device), True]
+            self.text_encoding = [self.empty_tokens, True]
         else:
             self.text_encoding = [self.cache.text_encoder_cache[0].to(self.accelerator.device), False]
 
@@ -2084,7 +2078,12 @@ def main():
                                 encoder_hidden_states = encoder_hidden_states.to(accelerator.device)
                     else:
                         # Handle dropout embeddings
-                        encoder_hidden_states = batch[0][1][0]
+                        with torch.no_grad():
+                            if args.clip_penultimate == True:
+                                encoder_hidden_states = text_encoder(batch[0][1][0].to(accelerator.device), output_hidden_states=True)
+                                encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states)
+                            else:
+                                encoder_hidden_states = text_encoder(batch[0][1][0].to(accelerator.device))[0]
 
                     # Predict the noise residual
                     model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
