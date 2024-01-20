@@ -1756,7 +1756,7 @@ def main():
         known_caches = cached_dataset.get_cache_list()
         # Only add more caches if there's more than 1 total latent batches
         if len(known_caches) > 2:
-            additional_caches = random.sample(known_caches, (int(known_caches)-1) * args.unconditional_dropout)
+            additional_caches = random.sample(known_caches, int( (len(known_caches)-1) * args.unconditional_dropout))
             print(f"{bcolors.WARNING}Adding {len(additional_caches)} additional duplicate batches as unconditional guidance.{bcolors.ENDC}")
             for duplicate_cache in additional_caches:
                 print(duplicate_cache)
