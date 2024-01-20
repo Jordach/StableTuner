@@ -1175,7 +1175,7 @@ class CachedLatentsDataset(Dataset):
         self.text_encoder = text_encoder
         self.accelerator = accelerator
         #handle text encoder for empty tokens
-        with torch.no_grad()
+        with torch.no_grad():
             self.empty_batch = [self.tokenizer('',padding="do_not_pad",truncation=True,max_length=self.tokenizer.model_max_length,).input_ids for i in range(batch_size)]
             self.empty_tokens = tokenizer.pad({"input_ids": self.empty_batch},padding="max_length",max_length=tokenizer.model_max_length,return_tensors="pt",).input_ids
 
