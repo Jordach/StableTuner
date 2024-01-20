@@ -163,6 +163,9 @@ import subprocess
 import safetensors
 import requests
 import time
+import warnings
+# Ignore dropout batches having no gradient
+# warnings.filterwarnings('ignore', message="None of the inputs have requires_grad=True")
 
 from clip_segmentation import ClipSeg
 import gc
@@ -2079,11 +2082,16 @@ def main():
                     else:
                         # Handle dropout embeddings
                         with torch.no_grad():
+                            if args.train_text_encoder:
+                                text_encoder.eval()
+                                
                             if args.clip_penultimate == True:
                                 encoder_hidden_states = text_encoder(batch[0][1][0].to(accelerator.device), output_hidden_states=True)
                                 encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
                             else:
                                 encoder_hidden_states = text_encoder(batch[0][1][0].to(accelerator.device))[0]
+                            if args.train_text_encoder:
+                                text_encoder.train()
 
                     # Predict the noise residual
                     model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
