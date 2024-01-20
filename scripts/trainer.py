@@ -1178,7 +1178,11 @@ class CachedLatentsDataset(Dataset):
         #handle text encoder for empty tokens
         self.empty_tokens = tokenizer.pad({"input_ids": self.empty_batch},padding="max_length",max_length=tokenizer.model_max_length,return_tensors="pt",).input_ids
         with torch.no_grad():
-            self.empty_embed = self.text_encoder(self.empty_tokens)[0]
+            if args.clip_penultimate == True:
+                self.hidden_states = text_encoder(self.empty_tokens, output_hidden_states=True)
+                self.empty_embed = text_encoder.text_model.final_layer_norm(self.hidden_states['hidden_states'][-2])
+            else:
+                self.empty_embed = self.text_encoder(self.empty_tokens)[0]
 
         self.model_variant = model_variant
         self.shuffle_per_epoch = shuffle_per_epoch
@@ -2073,6 +2077,9 @@ def main():
                                 else:
                                     encoder_hidden_states = text_encoder(batch[0][1][0])[0]
                                 encoder_hidden_states = encoder_hidden_states.to(accelerator.device)
+                    else:
+                        # Handle dropout embeddings
+                        encoder_hidden_states = batch[0][1][0]
 
                     # Predict the noise residual
                     model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
