@@ -1188,7 +1188,7 @@ class CachedLatentsDataset(Dataset):
     def __getitem__(self, index):
         if index == 0:
             if self.shuffle_per_epoch == True:
-                self.cache_paths = List(random.sample(self.cache_paths, len(self.cache_paths)))
+                random.shuffle(self.cache_paths)
 
         self.cache = torch.load(self.cache_paths[index][0])
         self.latents = self.cache.latents_cache[0]
