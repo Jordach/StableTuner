@@ -1196,11 +1196,11 @@ class CachedLatentsDataset(Dataset):
         if self.cache_paths[index][1]:
             with torch.no_grad():
                 if args.clip_penultimate == True:
-                    self.hidden_states = self.text_encoder(self.empty_tokens, output_hidden_states=True)
-                    self.empty_embed = self.text_encoder.text_model.final_layer_norm(self.hidden_states['hidden_states'][-2])
+                    self.hidden_states = self.text_encoder(self.empty_tokens.to(self.accelerator.device), output_hidden_states=True)
+                    self.empty_embed = self.text_encoder.text_model.final_layer_norm(self.hidden_states['hidden_states'][-2].to(self.accelerator.device))
                 else:
                     self.empty_embed = self.text_encoder(self.empty_tokens)[0]
-            self.text_encoding = [self.empty_embed, True]
+            self.text_encoding = [self.empty_embed.to(self.accelerator.device), True]
         else:
             self.text_encoding = [self.cache.text_encoder_cache[0].to(self.accelerator.device), False]
 
