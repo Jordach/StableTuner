@@ -2121,7 +2121,7 @@ def main():
 
                 if not global_step % args.log_interval:
                     if args.min_snr_gamma or args.snr_debias:
-                        logs = {"lossmod": loss_avg.avg.item(), "lossnat": nat_loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
+                        logs = {"lossmod": loss_avg.avg.item(), "loss": nat_loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
                     else:
                         logs = {"loss": loss_avg.avg.item(), "lr": lr_scheduler.get_last_lr()[0]}
                     progress_bar.set_postfix(**logs)
