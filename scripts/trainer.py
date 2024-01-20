@@ -1177,12 +1177,6 @@ class CachedLatentsDataset(Dataset):
         self.empty_batch = [self.tokenizer('',padding="do_not_pad",truncation=True,max_length=self.tokenizer.model_max_length,).input_ids for i in range(batch_size)]
         #handle text encoder for empty tokens
         self.empty_tokens = tokenizer.pad({"input_ids": self.empty_batch},padding="max_length",max_length=tokenizer.model_max_length,return_tensors="pt",).input_ids
-        with torch.no_grad():
-            if args.clip_penultimate == True:
-                self.hidden_states = text_encoder(self.empty_tokens, output_hidden_states=True)
-                self.empty_embed = text_encoder.text_model.final_layer_norm(self.hidden_states['hidden_states'][-2])
-            else:
-                self.empty_embed = self.text_encoder(self.empty_tokens)[0]
 
         self.model_variant = model_variant
         self.shuffle_per_epoch = shuffle_per_epoch
@@ -1200,6 +1194,12 @@ class CachedLatentsDataset(Dataset):
         self.extra_cache = None
         self.text_encoding = None
         if self.cache_paths[index][1]:
+            with torch.no_grad():
+                if args.clip_penultimate == True:
+                    self.hidden_states = self.text_encoder(self.empty_tokens, output_hidden_states=True)
+                    self.empty_embed = self.text_encoder.text_model.final_layer_norm(self.hidden_states['hidden_states'][-2])
+                else:
+                    self.empty_embed = self.text_encoder(self.empty_tokens)[0]
             self.text_encoding = [self.empty_embed, True]
         else:
             self.text_encoding = [self.cache.text_encoder_cache[0].to(self.accelerator.device), False]
@@ -1461,6 +1461,10 @@ def main():
         noise_scheduler.betas = tu.enforce_zero_terminal_snr(noise_scheduler.betas)
         tu.prepare_scheduler_for_custom_training(noise_scheduler, accelerator.device)
 
+    if args.scale_v_pred_loss:
+        print(f"{bcolors.WARNING}Will rescale v-prediction loss.{bcolors.ENDC}")
+    if args.snr_debias:
+        print(f"{bcolors.WARNING}Will debias SNR timesteps using loss.{bcolors.ENDC}")
     if args.with_pertubation_noise:
         print(f"{bcolors.WARNING}Perturbation Noise set to {args.perturbation_noise_weight}.{bcolors.ENDC}")
 
