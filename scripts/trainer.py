@@ -1837,9 +1837,6 @@ def main():
     num_update_steps_per_epoch = len(train_dataloader)
     if overrode_max_train_steps:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
-        #print(args.max_train_steps, num_update_steps_per_epoch)
-    # Afterwards we recalculate our number of training epochs
-    #print(args.max_train_steps, num_update_steps_per_epoch)
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # We need to initialize the trackers we use, and also store our configuration.
@@ -1847,8 +1844,7 @@ def main():
     if accelerator.is_main_process:
         accelerator.init_trackers("dreambooth")
     # Train!
-    total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
-    
+
     def save_and_sample_weights(step,context='checkpoint',save_model=True, auto_upload=False, complete=True):
         try:
             # Create the pipeline using using the trained modules and save it.
@@ -2146,15 +2142,16 @@ def main():
                         pass
                     
                 # Clean up every 1% trained while under multi GPU mode while not in debug
-                if not e_steps % ((num_update_steps_per_epoch - 1) // 100) and args.multi_gpu:
-                    if torch.cuda.is_available() and not args.debug_flag:
-                        # Wait for processes to sync up then clear cache
-                        accelerator.wait_for_everyone()
-                        torch.cuda.empty_cache()
-                        accelerator.free_memory()
-                        gc.collect()
-                        # And do so afterwards to prevent any losses during training
-                        accelerator.wait_for_everyone()
+                if args.multi_gpu and num_update_steps_per_epoch > 100:
+                    if not e_steps % ((num_update_steps_per_epoch - 1) // 100):
+                        if torch.cuda.is_available() and not args.debug_flag:
+                            # Wait for processes to sync up then clear cache
+                            accelerator.wait_for_everyone()
+                            torch.cuda.empty_cache()
+                            accelerator.free_memory()
+                            gc.collect()
+                            # And do so afterwards to prevent any losses during training
+                            accelerator.wait_for_everyone()
 
                 if args.half_completion_upload and not args.save_every_quarter:
                     if not e_steps % (num_update_steps_per_epoch // 2):
