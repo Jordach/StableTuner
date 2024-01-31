@@ -607,7 +607,8 @@ class Depth2Img:
             image_path = Path(image_path)
         return image_path.parent / f"{image_path.stem}-depth.png"
         
-#Adapted from torch-ema https://github.com/fadel/pytorch_ema/blob/master/torch_ema/ema.py#L14 and taken from harubaru's implementation https://github.com/harubaru/waifu-diffusion
+# Adapted from torch-ema https://github.com/fadel/pytorch_ema/blob/master/torch_ema/ema.py#L14 
+# and taken from harubaru's implementation https://github.com/harubaru/waifu-diffusion
 class EMAModel:
     """
     Exponential Moving Average of models weights

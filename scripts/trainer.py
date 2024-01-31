@@ -1762,7 +1762,10 @@ def main():
         known_caches = cached_dataset.get_cache_list()
         # Only add more caches if there's more than 1 total latent batches
         if len(known_caches) > 2:
-            additional_caches = random.sample(known_caches, int( (len(known_caches)-1) * args.unconditional_dropout))
+            n_batches = int( (len(known_caches)-1) * args.unconditional_dropout)
+            if accelerator.num_processes > 1 and args.multi_gpu:
+                n_batches = n_batches // accelerator.num_processes
+            additional_caches = random.sample(known_caches, n_batches)
             print(f"{bcolors.WARNING}Adding {len(additional_caches)} additional duplicate batches as unconditional guidance.{bcolors.ENDC}")
             for duplicate_cache in additional_caches:
                 cached_dataset.add_pt_cache(duplicate_cache[0], dropout=True)
@@ -2007,6 +2010,7 @@ def main():
 
                     # Sample noise that we'll add to the latents
                     noise = torch.randn_like(latents)
+                    
                     bsz = latents.shape[0]
                     # Sample a random timestep for each image
                     timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=accelerator.device)
@@ -2031,7 +2035,7 @@ def main():
                             #print(f"\n\n\nC:{max_chunks}, L:{max_len}, T:{tru_len}")
                             # If we're a properly padded bunch of tokens that have come from the tokeniser padder, train normally;
                             # otherwise we're handling a dropout batch, and thusly need to handle it the normal way. 
-                            if tru_len == max_len and max_chunks > 1:
+                            if tru_len == max_len:
                                 # Duplicate batch tensor to prevent irreparably damaging it's token data
                                 # Recommended over torch.tensor()
                                 n_batch = batch[0][1][0].clone().detach()
@@ -2071,14 +2075,6 @@ def main():
                                 encoder_hidden_states = torch.stack(tuple(z))
                                 encoder_hidden_states = encoder_hidden_states.to(accelerator.device)
                                 del n_batch, tru_len, max_chunks, max_len, z, chunks, clamp_chunk, clamp_event
-
-                            else:
-                                if args.clip_penultimate == True:
-                                    encoder_hidden_states = text_encoder(batch[0][1][0], output_hidden_states=True)
-                                    encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
-                                else:
-                                    encoder_hidden_states = text_encoder(batch[0][1][0])[0]
-                                encoder_hidden_states = encoder_hidden_states.to(accelerator.device)
                     else:
                         # Handle dropout embeddings
                         with torch.no_grad():
@@ -2086,10 +2082,18 @@ def main():
                                 text_encoder.eval()
                                 
                             if args.clip_penultimate == True:
-                                encoder_hidden_states = text_encoder(batch[0][1][0].to(accelerator.device), output_hidden_states=True)
-                                encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
+                                if args.multi_gpu:
+                                    encoder_hidden_states = accelerator.unwrap_model(text_encoder)(batch[0][1][0].to(accelerator.device), output_hidden_states=True)
+                                    encoder_hidden_states = accelerator.unwrap_model(text_encoder).text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
+                                else:
+                                    encoder_hidden_states = text_encoder(batch[0][1][0].to(accelerator.device), output_hidden_states=True)
+                                    encoder_hidden_states = text_encoder.text_model.final_layer_norm(encoder_hidden_states['hidden_states'][-2])
                             else:
-                                encoder_hidden_states = text_encoder(batch[0][1][0].to(accelerator.device))[0]
+                                if args.multi_gpu:
+                                    encoder_hidden_states = accelerator.unwrap_model(text_encoder)(batch[0][1][0].to(accelerator.device))[0]
+                                else:
+                                    encoder_hidden_states = text_encoder(batch[0][1][0].to(accelerator.device))[0]
+                                    
                             if args.train_text_encoder:
                                 text_encoder.train()
 
