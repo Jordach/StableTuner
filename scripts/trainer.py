@@ -1286,12 +1286,12 @@ def main():
     )
 
     # Torch memory debugging
-    torch_mem_output = os.path.join(args.output_dir, "logs/", f"torch_main_process_memory_id_{accelerator.process_index}.pickle")
-    if args.debug_flag:
-        print(f"{bcolors.WARNING}Recording memory for GPU process id {accelerator.process_index}.{bcolors.ENDC}")
-        torch.cuda.memory._record_memory_history(max_entries=100000)
-    else:
-        torch.cuda.memory._record_memory_history(enabled=None)
+    # torch_mem_output = os.path.join(args.output_dir, "logs/", f"torch_main_process_memory_id_{accelerator.process_index}.pickle")
+    # if args.debug_flag:
+    #     print(f"{bcolors.WARNING}Recording memory for GPU process id {accelerator.process_index}.{bcolors.ENDC}")
+    #     torch.cuda.memory._record_memory_history(max_entries=100000)
+    # else:
+    #     torch.cuda.memory._record_memory_history(enabled=None)
 
 
     if args.seed is not None:
@@ -2168,16 +2168,16 @@ def main():
                 #         pass
                     
                 # Clean up every 1% trained while under multi GPU mode while not in debug
-                if args.multi_gpu and num_update_steps_per_epoch > 100:
-                    if not e_steps % ((num_update_steps_per_epoch - 1) // 100):
-                        if torch.cuda.is_available() and not args.debug_flag:
-                            # Wait for processes to sync up then clear cache
-                            accelerator.wait_for_everyone()
-                            torch.cuda.empty_cache()
-                            accelerator.free_memory()
-                            gc.collect()
-                            # And do so afterwards to prevent any losses during training
-                            accelerator.wait_for_everyone()
+                # if args.multi_gpu and num_update_steps_per_epoch > 100:
+                #     if not e_steps % ((num_update_steps_per_epoch - 1) // 100):
+                #         if torch.cuda.is_available() and not args.debug_flag:
+                #             # Wait for processes to sync up then clear cache
+                #             accelerator.wait_for_everyone()
+                #             torch.cuda.empty_cache()
+                #             accelerator.free_memory()
+                #             gc.collect()
+                #             # And do so afterwards to prevent any losses during training
+                #             accelerator.wait_for_everyone()
 
                 if args.half_completion_upload and not args.save_every_quarter:
                     if not e_steps % (num_update_steps_per_epoch // 2):
