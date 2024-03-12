@@ -96,6 +96,7 @@ register_arg("dataset_repeats", 1, "int", "How many times all the images in the 
 register_arg("use_text_files_as_captions", False, "bool", "Whether to use text files as captions within your dataset. Example: image.png image.txt in the same folder together.")
 register_arg("use_image_names_as_captions", False, "bool", "Use image names themselves as captions.")
 register_arg("auto_balance_concept_datasets", False, "bool", "This will equalise all datasets to the length of the smallest one. Destructive otherwise.")
+register_arg("reject_aspects", 100, "float", "What aspect ratio should images be rejected for being longer than?")
 
 # Optimisations
 st_comments["header4"] = "Optimisations:"

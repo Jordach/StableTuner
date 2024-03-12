@@ -59,6 +59,7 @@ def parse_args():
     parser.add_argument('--use_text_files_as_captions',    default=False, action="store_true")
     parser.add_argument('--use_image_names_as_captions',   default=False, action="store_true")
     parser.add_argument("--auto_balance_concept_datasets", default=False, action="store_true", help="will balance the number of images in each concept dataset to match the minimum number of images in any concept dataset")
+    parser.add_argument("--reject_aspects",                 default=100, type=float, help="What aspect ratio should images be rejected for being longer than?")
     
     # Optimisations
     parser.add_argument("--mixed_precision",             default="no", type=str, choices=["no", "fp16", "bf16","tf32"], help="Whether to use mixed precision. Choose between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10. and an Nvidia Ampere GPU.")
@@ -232,20 +233,77 @@ ASPECT_1024 = [[1024, 1024],
 [1728, 576], [576, 1728], 
 [1792, 576], [576, 1792]]
 
-ASPECT_768 = [[768,768],   # 589824 1:1
-    [896,640],[640,896],   # 573440 1.4:1
-    [832,704],[704,832],   # 585728 1.181:1
-    [960,576],[576,960],   # 552960 1.6:1
-    [1024,576],[576,1024], # 524288 1.778:1
-    [1088,512],[512,1088], # 497664 2.125:1
-    [1152,512],[512,1152], # 589824 2.25:1
-    [1216,448],[448,1216], # 552960 2.714:1
-    [1280,448],[448,1280], # 573440 2.857:1
-    [1344,384],[384,1344], # 518400 3.5:1
-    [1408,384],[384,1408], # 540672 3.667:1
-    [1472,320],[320,1472], # 470400 4.6:1
-    [1536,320],[320,1536], # 491520 4.8:1
-]
+ASPECT_768 = [[768,768]]                   # 589824 1:1
+add_ratio_to_bucket(840, 860, ASPECT_768)  # 722400 1:1.023
+add_ratio_to_bucket(800, 840, ASPECT_768)  # 672000 1:1.05
+add_ratio_to_bucket(824, 888, ASPECT_768)  # 731712 1:1.077
+add_ratio_to_bucket(800, 880, ASPECT_768)  # 704000 1:1.1
+add_ratio_to_bucket(768, 864, ASPECT_768)  # 663552 1:1.125
+add_ratio_to_bucket(800, 920, ASPECT_768)  # 736000 1:1.15
+add_ratio_to_bucket(760, 896, ASPECT_768)  # 680960 1:1.178
+add_ratio_to_bucket(760, 912, ASPECT_768)  # 693120 1:1.2
+add_ratio_to_bucket(760, 928, ASPECT_768)  # 705280 1:1.221
+add_ratio_to_bucket(768, 960, ASPECT_768)  # 737280 1:1.25
+add_ratio_to_bucket(728, 928, ASPECT_768)  # 675584 1:1.2747
+add_ratio_to_bucket(720, 936, ASPECT_768)  # 673920 1:1.3
+add_ratio_to_bucket(728, 986, ASPECT_768)  # 704704 1:1.3297
+add_ratio_to_bucket(736, 992, ASPECT_768)  # 730112 1:1.347
+add_ratio_to_bucket(728, 1000, ASPECT_768) # 728000 1:1.373
+add_ratio_to_bucket(720, 1008, ASPECT_768) # 725760 1:1.4
+add_ratio_to_bucket(720, 1024, ASPECT_768) # 737280 1:1.422
+add_ratio_to_bucket(712, 1032, ASPECT_768) # 734784 1:1.449
+add_ratio_to_bucket(704, 1040, ASPECT_768) # 732160 1:1.477
+add_ratio_to_bucket(688, 1032, ASPECT_768) # 710016 1:1.5
+add_ratio_to_bucket(688, 1048, ASPECT_768) # 721024 1:1.523
+add_ratio_to_bucket(608, 1056, ASPECT_768) # 718080 1:1.552
+add_ratio_to_bucket(672, 1056, ASPECT_768) # 709632 1:1.571
+add_ratio_to_bucket(672, 1072, ASPECT_768) # 720384 1:1.5952
+add_ratio_to_bucket(672, 1096, ASPECT_768) # 736512 1:1.6309
+add_ratio_to_bucket(656, 1080, ASPECT_768) # 708480 1:1.6463
+add_ratio_to_bucket(640, 1072, ASPECT_768) # 686080 1:1.675
+add_ratio_to_bucket(640, 1088, ASPECT_768) # 696320 1:1.7
+add_ratio_to_bucket(640, 1104, ASPECT_768) # 706560 1:1.725
+add_ratio_to_bucket(640, 1120, ASPECT_768) # 716800 1:1.75
+add_ratio_to_bucket(640, 1136, ASPECT_768) # 727040 1:1.775
+add_ratio_to_bucket(640, 1152, ASPECT_768) # 737280 1:1.8
+add_ratio_to_bucket(632, 1152, ASPECT_768) # 728064 1:1.822
+add_ratio_to_bucket(624, 1152, ASPECT_768) # 718848 1:1.846
+add_ratio_to_bucket(624, 1172, ASPECT_768) # 731328 1:1.878
+add_ratio_to_bucket(616, 1168, ASPECT_768) # 719488 1:1.896
+add_ratio_to_bucket(616, 1184, ASPECT_768) # 729344 1:1.922
+add_ratio_to_bucket(608, 1184, ASPECT_768) # 719872 1:1.947
+add_ratio_to_bucket(608, 1200, ASPECT_768) # 729600 1:1.973
+add_ratio_to_bucket(600, 1200, ASPECT_768) # 720000 1:2
+add_ratio_to_bucket(592, 1216, ASPECT_768) # 719872 1:2.054
+add_ratio_to_bucket(584, 1224, ASPECT_768) # 714816 1:2.095
+add_ratio_to_bucket(584, 1256, ASPECT_768) # 733504 1:2.15
+add_ratio_to_bucket(576, 1264, ASPECT_768) # 728064 1:2.194
+add_ratio_to_bucket(560, 1264, ASPECT_768) # 707840 1:2.257
+add_ratio_to_bucket(560, 1288, ASPECT_768) # 721280 1:2.3
+add_ratio_to_bucket(552, 1296, ASPECT_768) # 715392 1:2.347
+add_ratio_to_bucket(552, 1328, ASPECT_768) # 733056 1:2.405
+add_ratio_to_bucket(544, 1336, ASPECT_768) # 726784 1:2.455
+add_ratio_to_bucket(536, 1344, ASPECT_768) # 720384 1:2.507
+add_ratio_to_bucket(536, 1368, ASPECT_768) # 733248 1:2.552
+add_ratio_to_bucket(528, 1376, ASPECT_768) # 726528 1:2.606
+add_ratio_to_bucket(520, 1376, ASPECT_768) # 715520 1:2.646
+add_ratio_to_bucket(520, 1400, ASPECT_768) # 728000 1:2.692
+add_ratio_to_bucket(512, 1408, ASPECT_768) # 720896 1:2.75
+add_ratio_to_bucket(512, 1432, ASPECT_768) # 733184 1:2.796
+add_ratio_to_bucket(504, 1432, ASPECT_768) # 721728 1:2.841
+add_ratio_to_bucket(496, 1440, ASPECT_768) # 714240 1:2.903
+add_ratio_to_bucket(496, 1464, ASPECT_768) # 726144 1:2.951
+add_ratio_to_bucket(488, 1464, ASPECT_768) # 714432 1:3
+add_ratio_to_bucket(480, 1488, ASPECT_768) # 714240 1:3.1
+add_ratio_to_bucket(480, 1536, ASPECT_768) # 737280 1:3.2
+add_ratio_to_bucket(464, 1356, ASPECT_768) # 712704 1:3.310
+add_ratio_to_bucket(464, 1576, ASPECT_768) # 731264 1:3.396
+add_ratio_to_bucket(456, 1600, ASPECT_768) # 729600 1:3.508
+add_ratio_to_bucket(448, 1616, ASPECT_768) # 723968 1:3.607
+add_ratio_to_bucket(440, 1632, ASPECT_768) # 718080 1:3.709
+add_ratio_to_bucket(440, 1672, ASPECT_768) # 735680 1:3.8
+add_ratio_to_bucket(432, 1688, ASPECT_768) # 729216 1:3.907
+add_ratio_to_bucket(424, 1696, ASPECT_768) # 719104 1:4
 
 ASPECT_704 = [[704,704]]                   # 495616 1:1
 add_ratio_to_bucket(688, 720, ASPECT_704)  # 495360 1.05:1
@@ -757,6 +815,7 @@ class DataLoaderMultiAspect():
         print(f"{bcolors.WARNING} Number of image-caption pairs: {len(self.image_caption_pairs)}{bcolors.ENDC}") 
         if len(self.image_caption_pairs) == 0:
             raise Exception("All the buckets are empty. Please check your data or reduce the batch size.")
+            
     def get_all_images(self):
         if self.with_prior_loss == False:
             return self.image_caption_pairs
@@ -868,7 +927,8 @@ class DataLoaderMultiAspect():
                 if ext in ['.jpg', '.jpeg', '.png', '.bmp', '.webp']:
                     #try to open the file to make sure it's a valid image
                     try:
-                        img = Image.open(current)
+                        # Converting to RGB generally reveals any file problems like truncation
+                        img = Image.open(current).convert("RGB")
 
                         identifier = self.concept_prompt
                         if self.use_image_names_as_captions:
@@ -889,11 +949,14 @@ class DataLoaderMultiAspect():
                                     identifier = caption_from_filename
                         
                         width, height = img.size
-                        image_aspect = width / height
-                        target_wh = min(self.aspects, key=lambda aspects:abs(aspects[0]/aspects[1] - image_aspect))
+                        se = min(width, height)
+                        le = max(width, height)
+                        if le/se < args["reject_aspects"]:
+                            image_aspect = width / height
+                            target_wh = min(self.aspects, key=lambda aspects:abs(aspects[0]/aspects[1] - image_aspect))
 
-                        image_train_item = ImageTrainItem(image=None, extra=None, caption=identifier, target_wh=target_wh, pathname=current, flip_p=self.flip_p,model_variant=self.model_variant)
-                        self.prepared_train_data.append(image_train_item)
+                            image_train_item = ImageTrainItem(image=None, extra=None, caption=identifier, target_wh=target_wh, pathname=current, flip_p=self.flip_p,model_variant=self.model_variant)
+                            self.prepared_train_data.append(image_train_item)
                     except:
                         print(f" ** Skipping {current} because it failed to open, please check the file")
                         progress_bar.update(1)
