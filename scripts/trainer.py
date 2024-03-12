@@ -928,7 +928,8 @@ class DataLoaderMultiAspect():
                     #try to open the file to make sure it's a valid image
                     try:
                         # Converting to RGB generally reveals any file problems like truncation
-                        img = Image.open(current).convert("RGB")
+                        img = Image.open(current)
+                        img = img.convert("RGB")
 
                         identifier = self.concept_prompt
                         if self.use_image_names_as_captions:
@@ -951,12 +952,15 @@ class DataLoaderMultiAspect():
                         width, height = img.size
                         se = min(width, height)
                         le = max(width, height)
-                        if le/se < args["reject_aspects"]:
+                        if le/se < args.reject_aspects:
                             image_aspect = width / height
                             target_wh = min(self.aspects, key=lambda aspects:abs(aspects[0]/aspects[1] - image_aspect))
 
                             image_train_item = ImageTrainItem(image=None, extra=None, caption=identifier, target_wh=target_wh, pathname=current, flip_p=self.flip_p,model_variant=self.model_variant)
                             self.prepared_train_data.append(image_train_item)
+                        else:
+                            progress_bar.update(1)
+                            continue
                     except:
                         print(f" ** Skipping {current} because it failed to open, please check the file")
                         progress_bar.update(1)
